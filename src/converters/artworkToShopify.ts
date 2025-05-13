@@ -1,5 +1,4 @@
-
-import { ArtworkArchiveRecord, ShopifyProductRecord } from '../itypes';
+import { ArtworkArchiveRecord, ShopifyProductRecord } from '../types';
 import { Logger } from '../utils/logger';
 
 export class ArtworkToShopifyConverter {
@@ -8,23 +7,54 @@ export class ArtworkToShopifyConverter {
     
     const shopifyProducts: ShopifyProductRecord[] = [];
     let convertedCount = 0;
-    let skippedCount = 0;
+    let draftCount = 0;
 
-    for (const artwork of artworks) {
+    for (const [index, artwork] of artworks.entries()) {
       try {
-        // Skip if no name or price
-        if (!artwork.Name || artwork.Name === '*' || !artwork.Price) {
-          skippedCount++;
-          continue;
+        Logger.info(`Processing record ${index + 1}: ${artwork.Name || 'Unnamed'}`);
+        
+        let isDraft = false;
+        let draftReasons: string[] = [];
+        
+        let name = artwork.Name || '';
+        
+        if (!name || name.trim() === '') {
+          isDraft = true;
+          draftReasons.push('Missing name');
+          Logger.warning(`No name for record ${index + 1}, marking as draft for manual review`);
+        } else if (name.length === 1) {
+          isDraft = true;
+          draftReasons.push('Name is only one character');
+          Logger.warning(`Single character name for record ${index + 1}: "${name}", marking as draft`);
         }
 
-        const handle = this.generateHandle(artwork.Name);
-        const title = this.cleanTitle(artwork.Name);
+        let price = artwork.Price;
+        if (!price || price.trim() === '') {
+          isDraft = true;
+          draftReasons.push('Missing price');
+          price = '0';
+          Logger.warning(`No price for record ${index + 1} (${name}), setting to 0 and marking as draft`);
+        }
+
+        const handle = this.generateHandle(name || `record-${index + 1}`);
+        const title = name; 
         const description = this.generateDescription(artwork);
         const type = this.mapArtworkType(artwork.Type || artwork.Medium);
         const tags = this.generateTags(artwork);
-        const price = this.cleanPrice(artwork.Price);
+        const cleanedPrice = this.cleanPrice(price);
         const vendor = this.getVendor(artwork);
+
+        let status = 'active';
+        let published = 'TRUE';
+        
+        if (isDraft || artwork.Status?.toLowerCase() !== 'available') {
+          status = 'draft';
+          published = 'FALSE';
+          if (isDraft) {
+            draftCount++;
+            Logger.info(`Setting to draft: ${title} - Reasons: ${draftReasons.join(', ')}`);
+          }
+        }
 
         const shopifyProduct: ShopifyProductRecord = {
           Handle: handle,
@@ -34,20 +64,20 @@ export class ArtworkToShopifyConverter {
           'Product Category': 'Art & Collectibles > Artwork',
           Type: type,
           Tags: tags,
-          Published: artwork.Status?.toLowerCase() === 'available' ? 'TRUE' : 'FALSE',
+          Published: published,
           'Option1 Name': 'Type',
           'Option1 Value': 'Original',
           'Option2 Name': '',
           'Option2 Value': '',
           'Option3 Name': '',
           'Option3 Value': '',
-          'Variant SKU': artwork['Piece Id'] || `ART-${Date.now()}`,
-          'Variant Price': price,
+          'Variant SKU': artwork['Piece Id'] || `ART-${Date.now()}-${index}`,
+          'Variant Price': cleanedPrice,
           'Variant Inventory Qty': artwork.Status?.toLowerCase() === 'available' ? '1' : '0',
           'Image Src': artwork['Primary Image Url'] || '',
           'Image Position': '1',
-          'Image Alt Text': title,
-          Status: artwork.Status?.toLowerCase() === 'available' ? 'active' : 'draft',
+          'Image Alt Text': title || `Artwork ${index + 1}`,
+          Status: status,
           'Variant Inventory Policy': 'deny',
           'Variant Fulfillment Service': 'manual',
           'Variant Requires Shipping': 'TRUE',
@@ -55,11 +85,10 @@ export class ArtworkToShopifyConverter {
           'Variant Grams': '1000',
           'Variant Inventory Tracker': 'shopify',
           'Gift Card': 'FALSE',
-          'SEO Title': title,
+          'SEO Title': title || `Artwork ${index + 1}`,
           'SEO Description': description.replace(/<[^>]*>/g, '').substring(0, 160)
         };
 
-        // Fill empty fields to maintain CSV structure
         const emptyFields = [
           'Variant Barcode', 'Variant Compare At Price', 'Variant Weight Unit', 
           'Variant Tax Code', 'Cost per item', 'Included / United States',
@@ -74,13 +103,17 @@ export class ArtworkToShopifyConverter {
 
         shopifyProducts.push(shopifyProduct);
         convertedCount++;
+        
+        const statusMsg = status === 'draft' ? ' (DRAFT)' : ' (ACTIVE)';
+        Logger.success(`Successfully converted: ${title || 'Unnamed'}${statusMsg}`);
       } catch (error: any) {
-        Logger.warning(`Failed to convert artwork: ${artwork.Name} - ${error.message}`);
-        skippedCount++;
+        Logger.error(`Failed to convert artwork at index ${index + 1}: ${error.message}`);
       }
     }
 
-    Logger.success(`Conversion complete! Converted: ${convertedCount}, Skipped: ${skippedCount}`);
+    Logger.success(`Conversion complete! Total converted: ${convertedCount}`);
+    Logger.info(`Active products: ${convertedCount - draftCount}`);
+    Logger.info(`Draft products: ${draftCount}`);
     return shopifyProducts;
   }
 
@@ -92,12 +125,6 @@ export class ArtworkToShopifyConverter {
       .substring(0, 255);
   }
 
-  private static cleanTitle(name: string): string {
-    return name
-      .replace(/\*/g, '')
-      .replace(/\"/g, '')
-      .trim();
-  }
 
   private static generateDescription(artwork: ArtworkArchiveRecord): string {
     const parts: string[] = [];

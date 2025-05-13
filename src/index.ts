@@ -19,10 +19,16 @@ program
   .description('Preview data from Artwork Archive CSV')
   .action(Commands.preview);
 
+program
+  .command('analyze')
+  .description('Analyze Artwork Archive CSV for potential issues')
+  .action(Commands.analyze);
+
 program.on('--help', () => {
   Logger.info('\nExamples:');
   Logger.info('  $ npm run dev migrate');
   Logger.info('  $ npm run dev preview');
+  Logger.info('  $ npm run dev analyze');
 });
 
 program.parse(process.argv);
