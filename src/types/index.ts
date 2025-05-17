@@ -41,3 +41,29 @@ export type ShopifyProductRecord = {
   Status: string;
   [key: string]: string;
 }
+
+export type WooProduct = {
+  ID: number;
+  post_title: string;
+  post_content: string;
+  post_status: string;
+  sku: string;
+  regular_price: string;
+  sale_price: string;
+  stock_quantity: string;
+  weight: string;
+  categories: string;
+  tags: string;
+  image_url: string;
+  gallery_images: string;
+  thumbnail_id?: string;
+  gallery_ids?: string;
+}
+
+export type DbConfig = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+}

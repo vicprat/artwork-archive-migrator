@@ -6,7 +6,7 @@ const program = new Command();
 
 program
   .name('artwork-to-shopify')
-  .description('CLI tool to migrate Artwork Archive data to Shopify CSV format')
+  .description('CLI tool to migrate Artwork Archive and WooCommerce data to Shopify CSV format')
   .version('1.0.0');
 
 program
@@ -24,11 +24,17 @@ program
   .description('Analyze Artwork Archive CSV for potential issues')
   .action(Commands.analyze);
 
+program
+  .command('migrate-woo')
+  .description('Migrate WooCommerce products from MySQL database to Shopify format')
+  .action(Commands.migrateWooCommerce);
+
 program.on('--help', () => {
   Logger.info('\nExamples:');
   Logger.info('  $ npm run dev migrate');
   Logger.info('  $ npm run dev preview');
   Logger.info('  $ npm run dev analyze');
+  Logger.info('  $ npm run dev migrate-woo');
 });
 
 program.parse(process.argv);

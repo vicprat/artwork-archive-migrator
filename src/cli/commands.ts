@@ -4,8 +4,9 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { Logger } from '../utils/logger';
 import { CsvHandler } from '../utils/csvHandler';
-import { ArtworkToShopifyConverter } from '../converters/artworkToShopify';
-import { ArtworkArchiveRecord } from '../types';
+import { ArtworkToShopifyConverter } from '../converters/artwork';
+import { WooCommerceToShopifyConverter } from '../converters/wooCommerce';
+import { ArtworkArchiveRecord, DbConfig } from '../types';
 
 export class Commands {
   static async migrate(): Promise<void> {
@@ -214,6 +215,90 @@ export class Commands {
 
     } catch (error: any) {
       Logger.error(`Analysis failed: ${error.message}`);
+    }
+  }
+
+ static async migrateWooCommerce(): Promise<void> {
+    Logger.header('WooCommerce to Shopify Migration Tool');
+
+    // Configuración de la base de datos predefinida
+    const dbConfig: DbConfig = {
+      host: 'localhost',
+      port: 3306,
+      user: 'root',
+      password: 'root123',
+      database: 'impulsog_store'
+    };
+
+    // Solo preguntar por el archivo de salida
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'outputFile',
+        message: 'Enter the output filename for Shopify CSV:',
+        default: 'data/output/shopify_products_woo.csv'
+      }
+    ]);
+
+    try {
+      Logger.info(`Connecting to MySQL database (${dbConfig.host}:${dbConfig.port}, DB: ${dbConfig.database})...`);
+      
+      const wooProducts = await WooCommerceToShopifyConverter.getWooCommerceProducts(dbConfig);
+      
+      if (wooProducts.length === 0) {
+        Logger.warning('No products were found in WooCommerce. Please check your database connection and settings.');
+        return;
+      }
+
+      const shopifyProducts = WooCommerceToShopifyConverter.convertToShopify(wooProducts);
+
+      const shopifyHeaders = [
+        'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tags', 
+        'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 
+        'Option3 Name', 'Option3 Value', 'Variant SKU', 'Variant Grams', 
+        'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 
+        'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 
+        'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 
+        'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 
+        'Google Shopping / Google Product Category', 'Google Shopping / Gender', 
+        'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 
+        'Google Shopping / Custom Product', 'Variant Image', 'Variant Weight Unit', 
+        'Variant Tax Code', 'Cost per item', 'Included / United States', 
+        'Price / United States', 'Compare At Price / United States', 
+        'Included / International', 'Price / International', 
+        'Compare At Price / International', 'Status'
+      ];
+
+      const outputDir = path.dirname(answers.outputFile);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const outputPath = path.resolve(answers.outputFile);
+      await CsvHandler.writeCsv(outputPath, shopifyProducts, shopifyHeaders);
+
+      Logger.success(`Migration complete! Output saved to: ${outputPath}`);
+      
+      const mainProducts = shopifyProducts.filter(p => p.Title !== '');
+      Logger.info(`Total main products migrated: ${mainProducts.length}`);
+      
+      const activeProducts = mainProducts.filter(p => p.Status === 'active');
+      const draftProducts = mainProducts.filter(p => p.Status === 'draft');
+      const imagesCount = shopifyProducts.length - mainProducts.length;
+      
+      console.log('\n' + chalk.bold('Migration Summary:'));
+      console.log(chalk.bold('=================='));
+      console.log(chalk.green(`Active products: ${activeProducts.length}`));
+      console.log(chalk.yellow(`Draft products: ${draftProducts.length}`));
+      console.log(chalk.blue(`Additional product images: ${imagesCount}`));
+      
+      console.log('\n' + chalk.cyan('Next steps:'));
+      console.log('1. Review the Shopify CSV file before importing');
+      console.log('2. Import the CSV file in your Shopify admin');
+      console.log('3. Check product details and images after import');
+    } catch (error: any) {
+      Logger.error(`Migration from WooCommerce failed: ${error.message}`);
+      console.error(error);
     }
   }
 }

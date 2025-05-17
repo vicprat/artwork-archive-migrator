@@ -1,7 +1,7 @@
 {
   "name": "artwork_migrate",
   "version": "1.0.0",
- "description": "CLI tool to migrate Artwork Archive data to Shopify CSV format",
+  "description": "CLI tool to migrate Artwork Archive data to Shopify CSV format",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -9,7 +9,12 @@
     "dev": "ts-node src/index.ts",
     "test": "jest"
   },
-  "keywords": ["cli", "migration", "shopify", "artwork-archive"],
+  "keywords": [
+    "cli",
+    "migration",
+    "shopify",
+    "artwork-archive"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -17,7 +22,8 @@
     "commander": "^11.1.0",
     "csv-parser": "^3.0.0",
     "csv-writer": "^1.6.0",
-    "inquirer": "^8.2.6"
+    "inquirer": "^8.2.6",
+    "mysql2": "^3.14.1"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.7",
