@@ -1,0 +1,835 @@
+{
+  "summary": {
+    "totalDuplicates": 41,
+    "resolutionStrategy": "preferWoo",
+    "date": "2025-05-18T00:41:24.560Z",
+    "artworkProductsCount": 461,
+    "wooProductsCount": 296
+  },
+  "duplicates": [
+    {
+      "title": "amanecer",
+      "artworkSKU": "4481651",
+      "wooSKU": "WOO-4650",
+      "artworkPrice": "15360.00",
+      "wooPrice": "14400",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "80.0h x 60.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "960.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "bodegón contemporáneo",
+      "artworkSKU": "4481661",
+      "wooSKU": "WOO-4651",
+      "artworkPrice": "25600.00",
+      "wooPrice": "24000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 80.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "1600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4658",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4660",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4662",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4664",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4750",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-4752",
+      "artworkPrice": "0.00",
+      "wooPrice": "12600",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12600.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "sinko pesos",
+      "artworkSKU": "4473683",
+      "wooSKU": "WOO-4757",
+      "artworkPrice": "0.00",
+      "wooPrice": "20000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Alan Uribe",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "80.0h x 60.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "20000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "abandono infantil",
+      "artworkSKU": "5173660",
+      "wooSKU": "WOO-4758",
+      "artworkPrice": "15000.00",
+      "wooPrice": "18000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Alan Uribe",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "80.0h x 60.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "3000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "expresiones urbanas",
+      "artworkSKU": "4473687",
+      "wooSKU": "WOO-4759",
+      "artworkPrice": "13500.00",
+      "wooPrice": "16000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Alan Uribe",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "30.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "2500.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Hipersomnia",
+      "artworkSKU": "4481654",
+      "wooSKU": "WOO-4931",
+      "artworkPrice": "13200.00",
+      "wooPrice": "6500",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "75.0h x 55.0w",
+        "woo": "4h"
+      },
+      "matchType": "title",
+      "priceDifference": "6700.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\" Ejercicio XV",
+      "artworkSKU": "4474759",
+      "wooSKU": "WOO-4990",
+      "artworkPrice": "0.00",
+      "wooPrice": "22000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "180.0h x 135.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "22000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\" Ejercicio XX",
+      "artworkSKU": "4474760",
+      "wooSKU": "WOO-4991",
+      "artworkPrice": "0.00",
+      "wooPrice": "18000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "114.0h x 135.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "18000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-4994",
+      "artworkPrice": "7000.00",
+      "wooPrice": "5000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "2000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-4995",
+      "artworkPrice": "7000.00",
+      "wooPrice": "5000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "2000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-4996",
+      "artworkPrice": "7000.00",
+      "wooPrice": "6000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "1000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-4997",
+      "artworkPrice": "7000.00",
+      "wooPrice": "5000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "2000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\" Ejercicio XXIV",
+      "artworkSKU": "4474766",
+      "wooSKU": "WOO-4998",
+      "artworkPrice": "0.00",
+      "wooPrice": "15000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "57.0h x 47.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "15000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-4999",
+      "artworkPrice": "0.00",
+      "wooPrice": "8000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "8000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5000",
+      "artworkPrice": "0.00",
+      "wooPrice": "12000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "12000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5001",
+      "artworkPrice": "0.00",
+      "wooPrice": "6000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "6000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5002",
+      "artworkPrice": "0.00",
+      "wooPrice": "4000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "4000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5003",
+      "artworkPrice": "0.00",
+      "wooPrice": "9000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "9000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5004",
+      "artworkPrice": "0.00",
+      "wooPrice": "8000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "8000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5005",
+      "artworkPrice": "0.00",
+      "wooPrice": "8000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "8000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "De la serie \"Taciturnos de la Urbe\"",
+      "artworkSKU": "4474771",
+      "wooSKU": "WOO-5006",
+      "artworkPrice": "0.00",
+      "wooPrice": "4000",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Rafael Esquivel",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 115.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "4000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-5007",
+      "artworkPrice": "7000.00",
+      "wooPrice": "22000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "15000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-5008",
+      "artworkPrice": "7000.00",
+      "wooPrice": "17000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "10000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "S/T",
+      "artworkSKU": "5201016",
+      "wooSKU": "WOO-5009",
+      "artworkPrice": "7000.00",
+      "wooPrice": "26000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "70.0h x 50.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "19000.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Prueba de producto",
+      "artworkSKU": "5201018",
+      "wooSKU": "WOO-5105",
+      "artworkPrice": "20000.00",
+      "wooPrice": "20000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "TRANQUILO",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 100.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Breathe",
+      "artworkSKU": "5177557",
+      "wooSKU": "WOO-5137",
+      "artworkPrice": "14000.00",
+      "wooPrice": "14000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 70.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Let go",
+      "artworkSKU": "5177541",
+      "wooSKU": "WOO-5139",
+      "artworkPrice": "36000.00",
+      "wooPrice": "36000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 120.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Lucid memories",
+      "artworkSKU": "5201020",
+      "wooSKU": "WOO-5148",
+      "artworkPrice": "20000.00",
+      "wooPrice": "20000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 100.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "The beginning",
+      "artworkSKU": "5177559",
+      "wooSKU": "WOO-5150",
+      "artworkPrice": "14000.00",
+      "wooPrice": "14000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 100.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Manifest",
+      "artworkSKU": "5177542",
+      "wooSKU": "WOO-5152",
+      "artworkPrice": "19200.00",
+      "wooPrice": "19200",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "150.0h x 80.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Night of day",
+      "artworkSKU": "5177561",
+      "wooSKU": "WOO-5156",
+      "artworkPrice": "24000.00",
+      "wooPrice": "24000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Pyramid",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "120.0h x 100.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Clamatismo",
+      "artworkSKU": "5177543",
+      "wooSKU": "WOO-5171",
+      "artworkPrice": "60000.00",
+      "wooPrice": "60000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "Samot",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "200.0h x 150.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-5348",
+      "artworkPrice": "0.00",
+      "wooPrice": "8300",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "8300.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Sin título",
+      "artworkSKU": "4481352",
+      "wooSKU": "WOO-5350",
+      "artworkPrice": "0.00",
+      "wooPrice": "8300",
+      "artworkStatus": "draft",
+      "wooStatus": "active",
+      "artworkArtist": "Osiel Guerrero",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "25.0h x 20.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "8300.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    },
+    {
+      "title": "Contemplación en la altura",
+      "artworkSKU": "5108909",
+      "wooSKU": "WOO-5749",
+      "artworkPrice": "35000.00",
+      "wooPrice": "35000",
+      "artworkStatus": "active",
+      "wooStatus": "active",
+      "artworkArtist": "TRANQUILO",
+      "wooArtist": "Impulso Galeria",
+      "dimensions": {
+        "artwork": "100.0h x 100.0w",
+        "woo": ""
+      },
+      "matchType": "title",
+      "priceDifference": "0.00",
+      "sameArtist": false,
+      "sameDimensions": false,
+      "resolution": "preferWoo"
+    }
+  ],
+  "genericTitleStats": {
+    "sinTitulo": 8,
+    "st": 7
+  }
+}
