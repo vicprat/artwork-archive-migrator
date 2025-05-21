@@ -7,6 +7,8 @@ import { CsvHandler } from '../utils/csvHandler';
 import { ArtworkToShopifyConverter } from '../converters/artwork';
 import { WooCommerceToShopifyConverter } from '../converters/wooCommerce';
 import { ArtworkArchiveRecord, DbConfig } from '../types';
+import { extractDimensions, generateHtmlReport } from '../utils/report';
+import { generateComparisonKeys, NormalizeUtils } from '../utils/normalizeFields';
 
 export class Commands {
   static async preview(): Promise<void> {
@@ -137,7 +139,7 @@ export class Commands {
     }
   }
 
-   static async migrate(): Promise<void> {
+    static async migrate(): Promise<void> {
     Logger.header('Unified Migration Tool: Artwork Archive + WooCommerce to Shopify');
 
     const dbConfig: DbConfig = {
@@ -192,6 +194,26 @@ export class Commands {
         ],
         default: 'keepBoth',
         when: (answers) => answers.includeWooCommerce && answers.checkDuplicates
+      },
+      {
+        type: 'list',
+        name: 'matchingStrategy',
+        message: 'Which duplicate detection strategy do you want to use?',
+        choices: [
+          { name: 'Exact title match (basic)', value: 'exactTitle' },
+          { name: 'Normalized title match (handles special chars & case)', value: 'normalizedTitle' },
+          { name: 'Advanced match (title + artist similarity)', value: 'advanced' },
+          { name: 'Fuzzy match (detects similar titles)', value: 'fuzzy' }
+        ],
+        default: 'normalizedTitle',
+        when: (answers) => answers.includeWooCommerce && answers.checkDuplicates
+      },
+      {
+        type: 'number',
+        name: 'similarityThreshold',
+        message: 'For fuzzy matching, set similarity threshold (0.8 = 80% similar):',
+        default: 0.8,
+        when: (answers) => answers.matchingStrategy === 'fuzzy'
       }
     ]);
 
@@ -225,71 +247,275 @@ export class Commands {
             if (answers.checkDuplicates) {
               Logger.info('Checking for duplicate products between Artwork Archive and WooCommerce...');
               
+              // Create maps for both product sets with normalized keys
               const artworkProductMap = new Map();
               const mainArtworkProducts = artworkProducts.filter(p => p.Status !== undefined);
               
+              // Prepare normalized values for Artwork products
               mainArtworkProducts.forEach(product => {
                 if (product.Title) {
-                  const normalizedTitle = product.Title.toLowerCase().trim();
-                  artworkProductMap.set(normalizedTitle, product);
+                  // Generate the comparison key based on selected strategy
+                  const keys = generateComparisonKeys(
+                    product.Title, 
+                    product.Vendor, 
+                    extractDimensions(product['Body (HTML)'] || ''),
+                    answers.matchingStrategy
+                  );
+                  
+                  // Store under all applicable keys
+                  keys.forEach(key => {
+                    if (!artworkProductMap.has(key)) {
+                      artworkProductMap.set(key, []);
+                    }
+                    artworkProductMap.get(key).push(product);
+                  });
                 }
               });
               
-               const mainWooProducts = wooProducts.filter(p => p.Title !== '');
+              const mainWooProducts = wooProducts.filter(p => p.Title !== '');
               let duplicatesCount = 0;
               
               for (const wooProduct of mainWooProducts) {
                 if (wooProduct.Title) {
-                  const normalizedTitle = wooProduct.Title.toLowerCase().trim();
+                  // Generate comparison keys for WooCommerce product
+                  const keys = generateComparisonKeys(
+                    wooProduct.Title, 
+                    wooProduct.Vendor, 
+                    extractDimensions(wooProduct['Body (HTML)'] || ''),
+                    answers.matchingStrategy
+                  );
                   
-                  if (artworkProductMap.has(normalizedTitle)) {
-                    duplicatesCount++;
-                    const artworkProduct = artworkProductMap.get(normalizedTitle);
-                    
-                    duplicateProducts.push({
-                      title: wooProduct.Title,
-                      artworkSKU: artworkProduct['Variant SKU'],
-                      wooSKU: wooProduct['Variant SKU'],
-                      artworkPrice: artworkProduct['Variant Price'],
-                      wooPrice: wooProduct['Variant Price'],
-                      artworkStatus: artworkProduct.Status,
-                      wooStatus: wooProduct.Status,
-                      artworkArtist: artworkProduct.Vendor || 'N/A',
-                      wooArtist: wooProduct.Vendor || 'N/A',
-                      dimensions: {
-                        artwork: Commands.extractDimensions(artworkProduct['Body (HTML)'] || ''),
-                        woo: Commands.extractDimensions(wooProduct['Body (HTML)'] || '')
-                      },
-                      matchType: 'title'
-                    });
+                  // Check each key for potential matches
+                  let foundDuplicate = false;
+                  
+                  for (const key of keys) {
+                    if (artworkProductMap.has(key)) {
+                      // Found at least one potential match
+                      const artworkMatches = artworkProductMap.get(key);
+                      
+                      for (const artworkProduct of artworkMatches) {
+                        let matchType = 'title';
+                        let similarity = 1.0;
+                        
+                        // For fuzzy matching, calculate actual similarity
+                        if (answers.matchingStrategy === 'fuzzy') {
+                          similarity = NormalizeUtils.getSimilarity(
+                            wooProduct.Title,
+                            artworkProduct.Title
+                          );
+                          
+                          // Skip if below threshold
+                          if (similarity < answers.similarityThreshold) {
+                            continue;
+                          }
+                          
+                          matchType = `fuzzy (${Math.round(similarity * 100)}%)`;
+                        } else if (answers.matchingStrategy === 'advanced') {
+                          // For advanced matching, check if title+artist matched
+                          if (
+                            NormalizeUtils.normalizeTitle(wooProduct.Title) === 
+                            NormalizeUtils.normalizeTitle(artworkProduct.Title) &&
+                            NormalizeUtils.normalizeArtist(wooProduct.Vendor) === 
+                            NormalizeUtils.normalizeArtist(artworkProduct.Vendor)
+                          ) {
+                            matchType = 'title+artist';
+                          } else if (
+                            NormalizeUtils.normalizeTitle(wooProduct.Title) === 
+                            NormalizeUtils.normalizeTitle(artworkProduct.Title)
+                          ) {
+                            matchType = 'title only';
+                          } else {
+                            continue; // Not a real match
+                          }
+                        }
+                        
+                        duplicatesCount++;
+                        foundDuplicate = true;
+                        
+                        duplicateProducts.push({
+                          title: wooProduct.Title,
+                          artworkSKU: artworkProduct['Variant SKU'],
+                          wooSKU: wooProduct['Variant SKU'],
+                          artworkPrice: artworkProduct['Variant Price'],
+                          wooPrice: wooProduct['Variant Price'],
+                          artworkStatus: artworkProduct.Status,
+                          wooStatus: wooProduct.Status,
+                          artworkArtist: artworkProduct.Vendor || 'N/A',
+                          wooArtist: wooProduct.Vendor || 'N/A',
+                          dimensions: {
+                            artwork: extractDimensions(artworkProduct['Body (HTML)'] || ''),
+                            woo: extractDimensions(wooProduct['Body (HTML)'] || '')
+                          },
+                          matchType: matchType,
+                          similarity: similarity
+                        });
+                        
+                        // For non-fuzzy matches, we only want the first match
+                        if (answers.matchingStrategy !== 'fuzzy') {
+                          break;
+                        }
+                      }
+                      
+                      if (foundDuplicate && answers.matchingStrategy !== 'fuzzy') {
+                        break;
+                      }
+                    }
                   }
                 }
               }
               
+              // Remove duplicates if we have multiple matches for the same WooCommerce product
+              if (answers.matchingStrategy === 'fuzzy') {
+                // Group duplicates by wooSKU
+                const duplicatesBySKU = new Map();
+                for (const dupe of duplicateProducts) {
+                  if (!duplicatesBySKU.has(dupe.wooSKU)) {
+                    duplicatesBySKU.set(dupe.wooSKU, []);
+                  }
+                  duplicatesBySKU.get(dupe.wooSKU).push(dupe);
+                }
+                
+                // For each WooCommerce product, keep only the best match
+                const filteredDuplicates = [];
+                for (const [_, matches] of duplicatesBySKU.entries()) {
+                  if (matches.length > 1) {
+                    // Sort by similarity (highest first)
+                    matches.sort((a: any, b: any) => b.similarity - a.similarity);
+                    filteredDuplicates.push(matches[0]);
+                  } else {
+                    filteredDuplicates.push(matches[0]);
+                  }
+                }
+                
+                duplicateProducts = filteredDuplicates;
+                duplicatesCount = duplicateProducts.length;
+              }
+              
               if (duplicatesCount > 0) {
-                Logger.warning(`Found ${duplicatesCount} duplicate products between Artwork Archive and WooCommerce`);
+                Logger.warning(`Found ${duplicatesCount} duplicate products between Artwork Archive and WooCommerce using ${answers.matchingStrategy} matching`);
                 
                 console.log('\n' + chalk.yellow.bold('Duplicate Products:'));
                 console.log(chalk.yellow.bold('==================='));
                 
                 duplicateProducts.forEach((dupe, index) => {
                   console.log(chalk.cyan(`\n${index + 1}. ${dupe.title}`));
-                  console.log(`   Artwork Archive: SKU: ${dupe.artworkSKU}, Price: ${dupe.artworkPrice}, Status: ${dupe.artworkStatus}`);
-                  console.log(`   WooCommerce:     SKU: ${dupe.wooSKU}, Price: ${dupe.wooPrice}, Status: ${dupe.wooStatus}`);
+                  console.log(`   Artwork Archive: SKU: ${dupe.artworkSKU}, Price: ${dupe.artworkPrice}, Artist: ${dupe.artworkArtist}, Status: ${dupe.artworkStatus}`);
+                  console.log(`   WooCommerce:     SKU: ${dupe.wooSKU}, Price: ${dupe.wooPrice}, Artist: ${dupe.wooArtist}, Status: ${dupe.wooStatus}`);
+                  console.log(`   Match type:      ${dupe.matchType}`);
                 });
                 
                 if (answers.duplicateStrategy === 'keepBoth') {
                   Logger.info('Keeping both versions of duplicate products (adding suffix to WooCommerce products)');
                   
+                  // Create a set of WooCommerce SKUs that are duplicates
+                  const duplicateWooSKUs = new Set(duplicateProducts.map(d => d.wooSKU));
+                  
                   for (const wooProduct of mainWooProducts) {
-                    if (wooProduct.Title) {
-                      const normalizedTitle = wooProduct.Title.toLowerCase().trim();
+                    // Check if this WooCommerce product is a duplicate
+                    const isProductDuplicate = wooProduct['Variant SKU'] && 
+                      duplicateWooSKUs.has(wooProduct['Variant SKU']);
+                    
+                    if (isProductDuplicate) {
+                      const oldTitle = wooProduct.Title;
+                      wooProduct.Title = `${wooProduct.Title} (WooCommerce)`;
+                      wooProduct.Handle = `${wooProduct.Handle}-woo`;
                       
-                      if (artworkProductMap.has(normalizedTitle)) {
+                      // Update related image rows
+                      const relatedImages = wooProducts.filter(p => 
+                        p.Title === '' && 
+                        p.Handle === oldTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+                      );
+                      
+                      relatedImages.forEach(img => {
+                        img.Handle = wooProduct.Handle;
+                      });
+                      
+                      Logger.info(`Renamed "${oldTitle}" to "${wooProduct.Title}"`);
+                    }
+                  }
+                } else if (answers.duplicateStrategy === 'preferArtwork') {
+                  Logger.info('Using Artwork Archive version for duplicate products');
+                  
+                  // Create a set of WooCommerce SKUs that are duplicates
+                  const duplicateWooSKUs = new Set(duplicateProducts.map(d => d.wooSKU));
+                  
+                  // Filter out WooCommerce products that are duplicates
+                  const filteredWooProducts = wooProducts.filter(p => {
+                    if (!p['Variant SKU']) return true; // Keep rows without SKUs (like images)
+                    return !duplicateWooSKUs.has(p['Variant SKU']);
+                  });
+                  
+                  Logger.info(`Removed ${wooProducts.length - filteredWooProducts.length} duplicate WooCommerce products`);
+                  wooProducts = filteredWooProducts;
+                } else if (answers.duplicateStrategy === 'preferWoo') {
+                  Logger.info('Using WooCommerce version for duplicate products');
+                  
+                  // Create a set of Artwork SKUs that are duplicates
+                  const duplicateArtworkSKUs = new Set(duplicateProducts.map(d => d.artworkSKU));
+                  
+                  // Filter out Artwork products that are duplicates
+                  const filteredArtworkProducts = artworkProducts.filter(p => {
+                    if (!p['Variant SKU']) return true; // Keep rows without SKUs
+                    return !duplicateArtworkSKUs.has(p['Variant SKU']);
+                  });
+                  
+                  Logger.info(`Removed ${artworkProducts.length - filteredArtworkProducts.length} duplicate Artwork Archive products`);
+                  artworkProducts = filteredArtworkProducts;
+                } else if (answers.duplicateStrategy === 'ask') {
+                  Logger.info('Asking for each duplicate product...');
+                  
+                  const toRemoveFromWoo = new Set();
+                  const toRemoveFromArtwork = new Set();
+                  const toRenameWoo = new Set();
+                  
+                  for (const dupe of duplicateProducts) {
+                    const dupeChoice = await inquirer.prompt([
+                      {
+                        type: 'list',
+                        name: 'preference',
+                        message: `Choose which version to keep for "${dupe.title}" (${dupe.matchType}):`,
+                        choices: [
+                          { name: `Artwork Archive (SKU: ${dupe.artworkSKU}, Price: ${dupe.artworkPrice}, Artist: ${dupe.artworkArtist})`, value: 'artwork' },
+                          { name: `WooCommerce (SKU: ${dupe.wooSKU}, Price: ${dupe.wooPrice}, Artist: ${dupe.wooArtist})`, value: 'woo' },
+                          { name: 'Keep both versions', value: 'both' }
+                        ]
+                      }
+                    ]);
+                    
+                    if (dupeChoice.preference === 'artwork') {
+                      toRemoveFromWoo.add(dupe.wooSKU);
+                    } else if (dupeChoice.preference === 'woo') {
+                      toRemoveFromArtwork.add(dupe.artworkSKU);
+                    } else if (dupeChoice.preference === 'both') {
+                      toRenameWoo.add(dupe.wooSKU);
+                    }
+                  }
+                  
+                  // Process removals and renames
+                  if (toRemoveFromWoo.size > 0) {
+                    wooProducts = wooProducts.filter(p => {
+                      if (!p['Variant SKU']) return true;
+                      return !toRemoveFromWoo.has(p['Variant SKU']);
+                    });
+                    Logger.info(`Removed ${toRemoveFromWoo.size} WooCommerce products based on your choices`);
+                  }
+                  
+                  if (toRemoveFromArtwork.size > 0) {
+                    artworkProducts = artworkProducts.filter(p => {
+                      if (!p['Variant SKU']) return true;
+                      return !toRemoveFromArtwork.has(p['Variant SKU']);
+                    });
+                    Logger.info(`Removed ${toRemoveFromArtwork.size} Artwork Archive products based on your choices`);
+                  }
+                  
+                  if (toRenameWoo.size > 0) {
+                    for (const wooProduct of mainWooProducts) {
+                      if (wooProduct['Variant SKU'] && toRenameWoo.has(wooProduct['Variant SKU'])) {
                         const oldTitle = wooProduct.Title;
                         wooProduct.Title = `${wooProduct.Title} (WooCommerce)`;
                         wooProduct.Handle = `${wooProduct.Handle}-woo`;
                         
+                        // Update related image rows
                         const relatedImages = wooProducts.filter(p => 
                           p.Title === '' && 
                           p.Handle === oldTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
@@ -302,99 +528,6 @@ export class Commands {
                         Logger.info(`Renamed "${oldTitle}" to "${wooProduct.Title}"`);
                       }
                     }
-                  }
-                } else if (answers.duplicateStrategy === 'preferArtwork') {
-                  Logger.info('Using Artwork Archive version for duplicate products');
-                  
-                   const filteredWooProducts = wooProducts.filter(p => {
-                    if (!p.Title) return true; 
-                    const normalizedTitle = p.Title.toLowerCase().trim();
-                    return !artworkProductMap.has(normalizedTitle);
-                  });
-                  
-                  Logger.info(`Removed ${wooProducts.length - filteredWooProducts.length} duplicate WooCommerce products`);
-                  wooProducts = filteredWooProducts;
-                } else if (answers.duplicateStrategy === 'preferWoo') {
-                  Logger.info('Using WooCommerce version for duplicate products');
-                  
-                  const wooProductMap = new Map();
-                  mainWooProducts.forEach(product => {
-                    if (product.Title) {
-                      const normalizedTitle = product.Title.toLowerCase().trim();
-                      wooProductMap.set(normalizedTitle, product);
-                    }
-                  });
-                  
-                   const filteredArtworkProducts = artworkProducts.filter(p => {
-                    if (!p.Title) return true;
-                    
-                    const normalizedTitle = p.Title.toLowerCase().trim();
-                    return !wooProductMap.has(normalizedTitle);
-                  });
-                  
-                  Logger.info(`Removed ${artworkProducts.length - filteredArtworkProducts.length} duplicate Artwork Archive products`);
-                  artworkProducts = filteredArtworkProducts;
-                } else if (answers.duplicateStrategy === 'ask') {
-                  Logger.info('Asking for each duplicate product...');
-                  
-                   const toRemoveFromWoo = new Set();
-                  const toRemoveFromArtwork = new Set();
-                  
-                  for (const dupe of duplicateProducts) {
-                    const dupeChoice = await inquirer.prompt([
-                      {
-                        type: 'list',
-                        name: 'preference',
-                        message: `Choose which version to keep for "${dupe.title}":`,
-                        choices: [
-                          { name: `Artwork Archive (SKU: ${dupe.artworkSKU}, Price: ${dupe.artworkPrice})`, value: 'artwork' },
-                          { name: `WooCommerce (SKU: ${dupe.wooSKU}, Price: ${dupe.wooPrice})`, value: 'woo' },
-                          { name: 'Keep both versions', value: 'both' }
-                        ]
-                      }
-                    ]);
-                    
-                    if (dupeChoice.preference === 'artwork') {
-                      toRemoveFromWoo.add(dupe.title.toLowerCase().trim());
-                    } else if (dupeChoice.preference === 'woo') {
-                      toRemoveFromArtwork.add(dupe.title.toLowerCase().trim());
-                    } else if (dupeChoice.preference === 'both') {
-                       for (const wooProduct of mainWooProducts) {
-                        if (wooProduct.Title && wooProduct.Title.toLowerCase().trim() === dupe.title.toLowerCase().trim()) {
-                          const oldTitle = wooProduct.Title;
-                          wooProduct.Title = `${wooProduct.Title} (WooCommerce)`;
-                          wooProduct.Handle = `${wooProduct.Handle}-woo`;
-                    
-                          const relatedImages = wooProducts.filter(p => 
-                            p.Title === '' && 
-                            p.Handle === oldTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-                          );
-                          
-                          relatedImages.forEach(img => {
-                            img.Handle = wooProduct.Handle;
-                          });
-                          
-                          Logger.info(`Renamed "${oldTitle}" to "${wooProduct.Title}"`);
-                          break;
-                        }
-                      }
-                    }
-                  }
-                  
-                  if (toRemoveFromWoo.size > 0) {
-                    wooProducts = wooProducts.filter(p => {
-                      if (!p.Title) return true;
-                      return !toRemoveFromWoo.has(p.Title.toLowerCase().trim());
-                    });
-                    Logger.info(`Removed ${toRemoveFromWoo.size} WooCommerce products based on your choices`);
-                  }
-                  
-                  if (toRemoveFromArtwork.size > 0) {
-                    artworkProducts = artworkProducts.filter(p => {
-                      if (!p.Title) return true;
-                      return !toRemoveFromArtwork.has(p.Title.toLowerCase().trim());
-                    });
-                    Logger.info(`Removed ${toRemoveFromArtwork.size} Artwork Archive products based on your choices`);
                   }
                 }
               } else {
@@ -468,6 +601,7 @@ export class Commands {
         
         if (answers.checkDuplicates && duplicateProducts.length > 0) {
           console.log(chalk.magenta(`\nDuplicate products detected: ${duplicateProducts.length}`));
+          console.log(chalk.magenta(`  - Detection strategy: ${answers.matchingStrategy}`));
           console.log(chalk.magenta(`  - Resolution strategy: ${answers.duplicateStrategy}`));
         }
       }
@@ -482,22 +616,78 @@ export class Commands {
       }
       
       if (answers.checkDuplicates && duplicateProducts.length > 0) {
+        // Collect insights about the duplicates for the report
+        const genericTitleCount = duplicateProducts.filter(d => 
+          NormalizeUtils.normalizeTitle(d.title) === 'untitled'
+        ).length;
+        
+        const priceDifferences = duplicateProducts.map(d => {
+          const price1 = parseFloat(d.artworkPrice);
+          const price2 = parseFloat(d.wooPrice);
+          return {
+            title: d.title,
+            difference: Math.abs(price1 - price2),
+            percentDifference: Math.abs((price1 - price2) / ((price1 + price2) / 2)) * 100
+          };
+        });
+        
+        const bigPriceDiffs = priceDifferences.filter(d => d.difference > 100);
+        const artistMismatches = duplicateProducts.filter(d => 
+          NormalizeUtils.normalizeArtist(d.artworkArtist) !== NormalizeUtils.normalizeArtist(d.wooArtist)
+        );
+        
         const reportData = {
           summary: {
             totalDuplicates: duplicateProducts.length,
             resolutionStrategy: answers.duplicateStrategy,
+            matchingStrategy: answers.matchingStrategy,
             date: new Date().toISOString(),
             artworkProductsCount: mainArtworkProducts.length,
-            wooProductsCount: mainWooProducts.length
+            wooProductsCount: mainWooProducts.length,
+            similarityThreshold: answers.similarityThreshold || 'N/A'
           },
+
           duplicates: duplicateProducts.map(dupe => ({
             ...dupe,
+            normalizedTitle: NormalizeUtils.normalizeTitle(dupe.title),
+            normalizedArtworkArtist: NormalizeUtils.normalizeArtist(dupe.artworkArtist),
+            normalizedWooArtist: NormalizeUtils.normalizeArtist(dupe.wooArtist),
             priceDifference: Math.abs(parseFloat(dupe.artworkPrice) - parseFloat(dupe.wooPrice)).toFixed(2),
-            sameArtist: (dupe.artworkArtist && dupe.wooArtist) ? 
-              dupe.artworkArtist.toLowerCase().trim() === dupe.wooArtist.toLowerCase().trim() : false,
-            sameDimensions: dupe.dimensions.artwork === dupe.dimensions.woo && dupe.dimensions.artwork !== '',
+            percentPriceDifference: (Math.abs(parseFloat(dupe.artworkPrice) - parseFloat(dupe.wooPrice)) / 
+              ((parseFloat(dupe.artworkPrice) + parseFloat(dupe.wooPrice)) / 2) * 100).toFixed(1),
+            sameArtist: NormalizeUtils.normalizeArtist(dupe.artworkArtist) === 
+              NormalizeUtils.normalizeArtist(dupe.wooArtist),
+            sameDimensions: NormalizeUtils.normalizeDimensions(dupe.dimensions.artwork) === 
+              NormalizeUtils.normalizeDimensions(dupe.dimensions.woo) && 
+              dupe.dimensions.artwork !== '',
             resolution: answers.duplicateStrategy === 'ask' ? 'manual' : answers.duplicateStrategy
           })),
+          stats: {
+            genericTitles: {
+              count: genericTitleCount,
+              percentage: (genericTitleCount / duplicateProducts.length * 100).toFixed(1)
+            },
+            priceDifferences: {
+              significantCount: bigPriceDiffs.length,
+              significantPercentage: (bigPriceDiffs.length / duplicateProducts.length * 100).toFixed(1),
+              averageDifference: (priceDifferences.reduce((sum, d) => sum + d.difference, 0) / 
+                priceDifferences.length).toFixed(2),
+              maxDifference: Math.max(...priceDifferences.map(d => d.difference)).toFixed(2)
+            },
+            artistMismatches: {
+              count: artistMismatches.length,
+              percentage: (artistMismatches.length / duplicateProducts.length * 100).toFixed(1)
+            }
+          }
+        };
+        
+        const duplicatesReportPath = path.resolve(path.dirname(answers.outputFile), 'duplicate_products_report.json');
+        fs.writeFileSync(duplicatesReportPath, JSON.stringify(reportData, null, 2));
+        Logger.info(`Detailed duplicate products report saved to: ${duplicatesReportPath}`);
+        
+        const htmlReportPath = path.resolve(path.dirname(answers.outputFile), 'duplicate_products_report.html');
+        const htmlContent = generateHtmlReport({
+          ...reportData,
           genericTitleStats: {
             sinTitulo: duplicateProducts.filter(d => 
               d.title.toLowerCase().trim() === 'sin título' || 
@@ -507,14 +697,7 @@ export class Commands {
               d.title.toLowerCase().trim() === 's/t'
             ).length
           }
-        };
-        
-        const duplicatesReportPath = path.resolve(path.dirname(answers.outputFile), 'duplicate_products_report.json');
-        fs.writeFileSync(duplicatesReportPath, JSON.stringify(reportData, null, 2));
-        Logger.info(`Detailed duplicate products report saved to: ${duplicatesReportPath}`);
-        
-        const htmlReportPath = path.resolve(path.dirname(answers.outputFile), 'duplicate_products_report.html');
-       const htmlContent = Commands.generateHtmlReport(reportData);
+        });
         fs.writeFileSync(htmlReportPath, htmlContent);
         Logger.info(`HTML duplicate products report saved to: ${htmlReportPath}`);
       }
@@ -531,275 +714,6 @@ export class Commands {
     }
   }
 
-private static generateHtmlReport(reportData: any): string {
-  const { summary, duplicates, genericTitleStats } = reportData;
   
-  const tableRows = duplicates.map((dupe: any, index: number) => `
-    <tr${dupe.matchType === 'title+artist' ? ' class="generic-title"' : ''}>
-      <td>${index + 1}</td>
-      <td>${dupe.title}</td>
-      <td>${dupe.artworkArtist || 'N/A'}</td>
-      <td>${dupe.wooArtist || 'N/A'}</td>
-      <td>${dupe.artworkSKU}</td>
-      <td>${dupe.wooSKU}</td>
-      <td>$${dupe.artworkPrice}</td>
-      <td>$${dupe.wooPrice}</td>
-      <td>$${dupe.priceDifference}</td>
-      <td>${dupe.artworkStatus}</td>
-      <td>${dupe.wooStatus}</td>
-      <td>${dupe.dimensions?.artwork || 'N/A'}</td>
-      <td>${dupe.dimensions?.woo || 'N/A'}</td>
-      <td>${dupe.matchType || 'title'}</td>
-    </tr>
-  `).join('');
-  
-  return `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Duplicate Products Report</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        line-height: 1.6;
-        margin: 0;
-        padding: 20px;
-        color: #333;
-      }
-      h1, h2, h3 {
-        color: #2c3e50;
-      }
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      .summary {
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-      }
-      th, td {
-        padding: 10px;
-        border: 1px solid #ddd;
-        text-align: left;
-      }
-      th {
-        background-color: #f2f2f2;
-        position: sticky;
-        top: 0;
-      }
-      tr:nth-child(even) {
-        background-color: #f9f9f9;
-      }
-      tr:hover {
-        background-color: #f1f1f1;
-      }
-      .generic-title {
-        background-color: #fffde7;
-      }
-      .price-diff {
-        font-weight: bold;
-        color: #e53935;
-      }
-      .stats {
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 20px;
-        margin-bottom: 20px;
-      }
-      .stat-card {
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 5px;
-        flex: 1;
-        min-width: 200px;
-      }
-      .filters {
-        margin-bottom: 20px;
-      }
-      .legend {
-        margin-top: 20px;
-        font-size: 0.9em;
-        color: #666;
-      }
-      .badge {
-        display: inline-block;
-        padding: 3px 7px;
-        border-radius: 3px;
-        font-size: 0.8em;
-        margin-right: 5px;
-      }
-      .badge-primary {
-        background-color: #007bff;
-        color: white;
-      }
-      .badge-warning {
-        background-color: #ffc107;
-        color: #212529;
-      }
-      @media print {
-        body {
-          font-size: 12pt;
-        }
-        .no-print {
-          display: none;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>Duplicate Products Report</h1>
-      
-      <div class="summary">
-        <h2>Summary</h2>
-        <p>Report generated on ${new Date(summary.date).toLocaleString()}</p>
-        <p>Total duplicate products found: <strong>${summary.totalDuplicates}</strong></p>
-        <p>Resolution strategy used: <strong>${summary.resolutionStrategy}</strong></p>
-      </div>
-      
-      <div class="stats">
-        <div class="stat-card">
-          <h3>Source Statistics</h3>
-          <p>Total Artwork Archive products: <strong>${summary.artworkProductsCount}</strong></p>
-          <p>Total WooCommerce products: <strong>${summary.wooProductsCount}</strong></p>
-          <p>Duplicates percentage: <strong>${((summary.totalDuplicates / (summary.artworkProductsCount + summary.wooProductsCount)) * 100).toFixed(2)}%</strong></p>
-        </div>
-        
-        <div class="stat-card">
-          <h3>Generic Titles</h3>
-          <p>"Sin Título/Sin Titulo" instances: <strong>${genericTitleStats.sinTitulo}</strong></p>
-          <p>"S/T" instances: <strong>${genericTitleStats.st}</strong></p>
-          <p>Percentage of generic titles: <strong>${((genericTitleStats.sinTitulo + genericTitleStats.st) / summary.totalDuplicates * 100).toFixed(2)}%</strong></p>
-        </div>
-      </div>
-      
-      <div class="filters no-print">
-        <h3>Filters</h3>
-        <label>
-          <input type="checkbox" id="genericFilter" checked> 
-          <span class="badge badge-warning">Show generic titles</span>
-        </label>
-        <label>
-          <input type="checkbox" id="priceDiffFilter"> 
-          <span class="badge badge-primary">Highlight price differences > 1000</span>
-        </label>
-      </div>
-      
-      <h2>Duplicate Products (${summary.totalDuplicates})</h2>
-      
-      <table id="duplicatesTable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Title</th>
-            <th>Artwork Artist</th>
-            <th>Woo Artist</th>
-            <th>Artwork SKU</th>
-            <th>Woo SKU</th>
-            <th>Artwork Price</th>
-            <th>Woo Price</th>
-            <th>Price Diff.</th>
-            <th>Artwork Status</th>
-            <th>Woo Status</th>
-            <th>Artwork Dimensions</th>
-            <th>Woo Dimensions</th>
-            <th>Match Type</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-      
-      <div class="legend">
-        <h3>Legend</h3>
-        <p><span class="badge badge-warning">Generic Title</span> Products with generic titles like "Sin Título" or "S/T" that were matched using both title and artist name.</p>
-        <p><span class="badge badge-primary">Price Difference</span> Highlights significant price differences between the two sources.</p>
-      </div>
-    </div>
-    
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        // Filtros
-        const genericFilter = document.getElementById('genericFilter');
-        const priceDiffFilter = document.getElementById('priceDiffFilter');
-        const table = document.getElementById('duplicatesTable');
-        const rows = table.querySelectorAll('tbody tr');
-        
-        genericFilter.addEventListener('change', function() {
-          rows.forEach(row => {
-            if (row.classList.contains('generic-title')) {
-              row.style.display = this.checked ? '' : 'none';
-            }
-          });
-        });
-        
-        priceDiffFilter.addEventListener('change', function() {
-          rows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            const priceDiff = parseFloat(cells[8].textContent.replace('$', ''));
-            
-            if (priceDiff > 1000) {
-              cells[8].classList.toggle('price-diff', this.checked);
-              if (this.checked) {
-                row.style.backgroundColor = '#fee';
-              } else {
-                row.style.backgroundColor = '';
-              }
-            }
-          });
-        });
-      });
-    </script>
-  </body>
-  </html>
-  `;
+ 
 }
-
-
-private static extractDimensions(html: string): string {
-  if (!html) return '';
-  
-  const dimensionsRegex = /<strong>Dimensions:<\/strong>\s*([^<]+)/i;
-  const match = html.match(dimensionsRegex);
-  
-  if (match && match[1]) {
-    return match[1].trim();
-  }
-  
-  const heightRegex = /(\d+(\.\d+)?)\s*h/i;
-  const widthRegex = /(\d+(\.\d+)?)\s*w/i;
-  const depthRegex = /(\d+(\.\d+)?)\s*d/i;
-  
-  const heightMatch = html.match(heightRegex);
-  const widthMatch = html.match(widthRegex);
-  const depthMatch = html.match(depthRegex);
-  
-  if (heightMatch || widthMatch || depthMatch) {
-    const dimensions = [];
-    if (heightMatch) dimensions.push(`${heightMatch[1]}h`);
-    if (widthMatch) dimensions.push(`${widthMatch[1]}w`);
-    if (depthMatch) dimensions.push(`${depthMatch[1]}d`);
-    
-    return dimensions.join(' x ');
-  }
-  
-  return '';
-}
-
-
-}
-
-
-
-

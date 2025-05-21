@@ -63,8 +63,4 @@ temp
 
 
 # Data files
-data/input/*.csv
-data/output/*.csv
-# But keep the folders
-!data/input/.gitkeep
-!data/output/.gitkeep
+/data/
