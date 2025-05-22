@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
-import { DbConfig, ShopifyProductRecord, WooProduct } from '../types';
+import { DbConfig, WooProduct } from '../types';
+import { ShopifyProduct } from '../models/ShopifyProduct';
 import { Logger } from '../utils/logger';
-
 
 export class WooCommerceToShopifyConverter {
   static async getWooCommerceProducts(config: DbConfig): Promise<WooProduct[]> {
@@ -56,6 +56,7 @@ export class WooCommerceToShopifyConverter {
       
       Logger.info(`Found ${products.length} products in WooCommerce`);
 
+      // Obtener URLs de imágenes
       for (const product of products) {
         if (product.thumbnail_id) {
           const [imageRows] = await connection.execute(
@@ -95,113 +96,18 @@ export class WooCommerceToShopifyConverter {
     }
   }
 
-  static convertToShopify(products: WooProduct[]): ShopifyProductRecord[] {
+  static convertToShopify(products: WooProduct[]): ShopifyProduct[] {
     Logger.info('Converting WooCommerce products to Shopify format...');
-    const shopifyProducts: ShopifyProductRecord[] = [];
+    const shopifyProducts: ShopifyProduct[] = [];
 
-    products.forEach((product, index) => {
-      const handle = this.generateHandle(product.post_title);
-      
-      const shopifyProduct: ShopifyProductRecord = {
-        Handle: handle,
-        Title: product.post_title,
-        'Body (HTML)': product.post_content,
-        Vendor: 'Impulso Galeria',
-        'Product Category': product.categories || 'Art & Collectibles > Artwork',
-        Type: product.categories ? product.categories.split(',')[0].trim() : 'Artwork',
-        Tags: product.tags || '',
-        Published: product.post_status === 'publish' ? 'TRUE' : 'FALSE',
-        'Option1 Name': 'Type',
-        'Option1 Value': 'Original',
-        'Option2 Name': '',
-        'Option2 Value': '',
-        'Option3 Name': '',
-        'Option3 Value': '',
-        'Variant SKU': product.sku || `WOO-${product.ID}`,
-        'Variant Grams': product.weight ? (parseFloat(product.weight) * 1000).toString() : '1000',
-        'Variant Inventory Tracker': 'shopify',
-        'Variant Inventory Qty': product.stock_quantity || '0',
-        'Variant Inventory Policy': 'deny',
-        'Variant Fulfillment Service': 'manual',
-        'Variant Price': product.regular_price || '0.00',
-        'Variant Compare At Price': product.sale_price || '',
-        'Variant Requires Shipping': 'TRUE',
-        'Variant Taxable': 'TRUE',
-        'Variant Barcode': '',
-        'Image Src': product.image_url || '',
-        'Image Position': '1',
-        'Image Alt Text': product.post_title,
-        'Gift Card': 'FALSE',
-        'SEO Title': product.post_title,
-        'SEO Description': product.post_content 
-          ? product.post_content.substring(0, 160).replace(/<[^>]*>/g, '')
-          : '',
-        Status: product.post_status === 'publish' ? 'active' : 'draft'
-      };
+    products.forEach((wooProduct, index) => {
+      const mainProduct = this.convertSingleWooProduct(wooProduct);
+      shopifyProducts.push(mainProduct);
 
-      const emptyFields = [
-        'Google Shopping / Google Product Category', 'Google Shopping / Gender',
-        'Google Shopping / Age Group', 'Google Shopping / MPN', 
-        'Google Shopping / Condition', 'Google Shopping / Custom Product',
-        'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item',
-        'Included / United States', 'Price / United States', 'Compare At Price / United States',
-        'Included / International', 'Price / International', 'Compare At Price / International'
-      ];
-
-      emptyFields.forEach(field => {
-        shopifyProduct[field] = '';
-      });
-
-      shopifyProducts.push(shopifyProduct);
-
-       if (product.gallery_images) {
-        const galleryUrls = product.gallery_images.split(', ');
-        galleryUrls.forEach((url, imgIndex) => {
-          if (url.trim()) {
-            const imageRow: ShopifyProductRecord = {
-              Handle: handle,
-              Title: '',
-              'Body (HTML)': '',
-              Vendor: '',
-              'Product Category': '',
-              Type: '',
-              Tags: '',
-              Published: '',
-              'Option1 Name': '',
-              'Option1 Value': '',
-              'Option2 Name': '',
-              'Option2 Value': '',
-              'Option3 Name': '',
-              'Option3 Value': '',
-              'Variant SKU': '',
-              'Variant Grams': '',
-              'Variant Inventory Tracker': '',
-              'Variant Inventory Qty': '',
-              'Variant Inventory Policy': '',
-              'Variant Fulfillment Service': '',
-              'Variant Price': '',
-              'Variant Compare At Price': '',
-              'Variant Requires Shipping': '',
-              'Variant Taxable': '',
-              'Variant Barcode': '',
-              'Image Src': url.trim(),
-              'Image Position': (imgIndex + 2).toString(),
-              'Image Alt Text': product.post_title,
-              'Gift Card': '',
-              'SEO Title': '',
-              'SEO Description': '',
-              Status: ''
-            };
-            
-            for (const [key, value] of Object.entries(shopifyProduct)) {
-              if (!(key in imageRow)) {
-                imageRow[key] = '';
-              }
-            }
-            
-            shopifyProducts.push(imageRow);
-          }
-        });
+      // Agregar filas de imágenes adicionales si existen
+      if (wooProduct.gallery_images) {
+        const additionalImages = this.createAdditionalImageRows(wooProduct, mainProduct);
+        shopifyProducts.push(...additionalImages);
       }
     });
 
@@ -209,11 +115,59 @@ export class WooCommerceToShopifyConverter {
     return shopifyProducts;
   }
 
-  private static generateHandle(title: string): string {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .substring(0, 255);
+  private static convertSingleWooProduct(wooProduct: WooProduct): ShopifyProduct {
+    const product = new ShopifyProduct();
+    
+    const status = wooProduct.post_status === 'publish' ? 'active' : 'draft';
+    const weight = wooProduct.weight ? (parseFloat(wooProduct.weight) * 1000).toString() : '1000';
+    
+    product
+      .setTitle(wooProduct.post_title)
+      .setHandle(wooProduct.post_title)
+      .setBodyHTML(wooProduct.post_content)
+      .setVendor('Impulso Galeria')
+      .setType(wooProduct.categories ? wooProduct.categories.split(',')[0].trim() : 'Artwork')
+      .setTags(wooProduct.tags || '')
+      .setVariantSKU(wooProduct.sku || `WOO-${wooProduct.ID}`)
+      .setVariantPrice(wooProduct.regular_price || '0.00')
+      .setVariantInventoryQty(wooProduct.stock_quantity || '0')
+      .setImageSrc(wooProduct.image_url || '')
+      .setStatus(status);
+
+    // Configurar campos específicos de WooCommerce
+    if (wooProduct.sale_price) {
+      product.setVariantCompareAtPrice(wooProduct.sale_price);
+    }
+
+    // Actualizar categoría de producto si existe
+    if (wooProduct.categories) {
+      const productRecord = product.toRecord();
+      productRecord['Product Category'] = wooProduct.categories;
+      // Nota: Necesitarías un método setter para esto en ShopifyProduct
+    }
+
+    // Configurar peso
+    const productRecord = product.toRecord();
+    productRecord['Variant Grams'] = weight;
+
+    return product;
+  }
+
+  private static createAdditionalImageRows(wooProduct: WooProduct, mainProduct: ShopifyProduct): ShopifyProduct[] {
+    const imageRows: ShopifyProduct[] = [];
+    const galleryUrls = wooProduct.gallery_images.split(', ');
+    
+    galleryUrls.forEach((url, imgIndex) => {
+      if (url.trim()) {
+        const imageRow = mainProduct.createImageRow(
+          url.trim(),
+          imgIndex + 2, // +2 porque la imagen principal es posición 1
+          wooProduct.post_title
+        );
+        imageRows.push(imageRow);
+      }
+    });
+    
+    return imageRows;
   }
 }

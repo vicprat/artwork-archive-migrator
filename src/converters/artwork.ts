@@ -1,11 +1,12 @@
-import { ArtworkArchiveRecord, ShopifyProductRecord } from '../types';
+import { ArtworkArchiveRecord } from '../types';
+import { ShopifyProduct } from '../models/ShopifyProduct';
 import { Logger } from '../utils/logger';
 
 export class ArtworkToShopifyConverter {
-  static convertArtworkToShopify(artworks: ArtworkArchiveRecord[]): ShopifyProductRecord[] {
+  static convertArtworkToShopify(artworks: ArtworkArchiveRecord[]): ShopifyProduct[] {
     Logger.info('Starting conversion from Artwork Archive to Shopify format...');
     
-    const shopifyProducts: ShopifyProductRecord[] = [];
+    const shopifyProducts: ShopifyProduct[] = [];
     let convertedCount = 0;
     let draftCount = 0;
 
@@ -13,99 +14,17 @@ export class ArtworkToShopifyConverter {
       try {
         Logger.info(`Processing record ${index + 1}: ${artwork.Name || 'Unnamed'}`);
         
-        let isDraft = false;
-        let draftReasons: string[] = [];
+        const product = this.convertSingleArtwork(artwork, index);
         
-        let name = artwork.Name || '';
+        if (product.getStatus() === 'draft') {
+          draftCount++;
+        }
         
-        if (!name || name.trim() === '') {
-          isDraft = true;
-          draftReasons.push('Missing name');
-          Logger.warning(`No name for record ${index + 1}, marking as draft for manual review`);
-        } else if (name.length === 1) {
-          isDraft = true;
-          draftReasons.push('Name is only one character');
-          Logger.warning(`Single character name for record ${index + 1}: "${name}", marking as draft`);
-        }
-
-        let price = artwork.Price;
-        if (!price || price.trim() === '') {
-          isDraft = true;
-          draftReasons.push('Missing price');
-          price = '0';
-          Logger.warning(`No price for record ${index + 1} (${name}), setting to 0 and marking as draft`);
-        }
-
-        const handle = this.generateHandle(name || `record-${index + 1}`);
-        const title = name; 
-        const description = this.generateDescription(artwork);
-        const type = this.mapArtworkType(artwork.Type || artwork.Medium);
-        const tags = this.generateTags(artwork);
-        const cleanedPrice = this.cleanPrice(price);
-        const vendor = this.getVendor(artwork);
-
-        let status = 'active';
-        let published = 'TRUE';
-        
-        if (isDraft || artwork.Status?.toLowerCase() !== 'available') {
-          status = 'draft';
-          published = 'FALSE';
-          if (isDraft) {
-            draftCount++;
-            Logger.info(`Setting to draft: ${title} - Reasons: ${draftReasons.join(', ')}`);
-          }
-        }
-
-        const shopifyProduct: ShopifyProductRecord = {
-          Handle: handle,
-          Title: title,
-          'Body (HTML)': description,
-          Vendor: vendor,
-          'Product Category': 'Art & Collectibles > Artwork',
-          Type: type,
-          Tags: tags,
-          Published: published,
-          'Option1 Name': 'Type',
-          'Option1 Value': 'Original',
-          'Option2 Name': '',
-          'Option2 Value': '',
-          'Option3 Name': '',
-          'Option3 Value': '',
-          'Variant SKU': artwork['Piece Id'] || `ART-${Date.now()}-${index}`,
-          'Variant Price': cleanedPrice,
-          'Variant Inventory Qty': artwork.Status?.toLowerCase() === 'available' ? '1' : '0',
-          'Image Src': artwork['Primary Image Url'] || '',
-          'Image Position': '1',
-          'Image Alt Text': title || `Artwork ${index + 1}`,
-          Status: status,
-          'Variant Inventory Policy': 'deny',
-          'Variant Fulfillment Service': 'manual',
-          'Variant Requires Shipping': 'TRUE',
-          'Variant Taxable': 'TRUE',
-          'Variant Grams': '1000',
-          'Variant Inventory Tracker': 'shopify',
-          'Gift Card': 'FALSE',
-          'SEO Title': title || `Artwork ${index + 1}`,
-          'SEO Description': description.replace(/<[^>]*>/g, '').substring(0, 160)
-        };
-
-        const emptyFields = [
-          'Variant Barcode', 'Variant Compare At Price', 'Variant Weight Unit', 
-          'Variant Tax Code', 'Cost per item', 'Included / United States',
-          'Price / United States', 'Compare At Price / United States',
-          'Included / International', 'Price / International',
-          'Compare At Price / International'
-        ];
-
-        emptyFields.forEach(field => {
-          shopifyProduct[field] = '';
-        });
-
-        shopifyProducts.push(shopifyProduct);
+        shopifyProducts.push(product);
         convertedCount++;
         
-        const statusMsg = status === 'draft' ? ' (DRAFT)' : ' (ACTIVE)';
-        Logger.success(`Successfully converted: ${title || 'Unnamed'}${statusMsg}`);
+        const statusMsg = product.getStatus() === 'draft' ? ' (DRAFT)' : ' (ACTIVE)';
+        Logger.success(`Successfully converted: ${product.getTitle() || 'Unnamed'}${statusMsg}`);
       } catch (error: any) {
         Logger.error(`Failed to convert artwork at index ${index + 1}: ${error.message}`);
       }
@@ -117,14 +36,65 @@ export class ArtworkToShopifyConverter {
     return shopifyProducts;
   }
 
-  private static generateHandle(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .substring(0, 255);
+  private static convertSingleArtwork(artwork: ArtworkArchiveRecord, index: number): ShopifyProduct {
+    const product = new ShopifyProduct();
+    
+    // Validaciones y determinación del estado
+    const validationResult = this.validateArtwork(artwork, index);
+    
+    // Configurar campos básicos
+    const name = artwork.Name || `record-${index + 1}`;
+    product
+      .setTitle(name)
+      .setHandle(name)
+      .setBodyHTML(this.generateDescription(artwork))
+      .setVendor(this.getVendor(artwork))
+      .setType(this.mapArtworkType(artwork.Type || artwork.Medium))
+      .setTags(this.generateTags(artwork))
+      .setVariantSKU(artwork['Piece Id'] || `ART-${Date.now()}-${index}`)
+      .setVariantPrice(artwork.Price || '0')
+      .setVariantInventoryQty(artwork.Status?.toLowerCase() === 'available' ? '1' : '0')
+      .setImageSrc(artwork['Primary Image Url'] || '');
+
+    // Configurar estado basado en validaciones
+    if (validationResult.isDraft || artwork.Status?.toLowerCase() !== 'available') {
+      product.setStatus('draft');
+      if (validationResult.isDraft) {
+        Logger.info(`Setting to draft: ${name} - Reasons: ${validationResult.reasons.join(', ')}`);
+      }
+    }
+
+    return product;
   }
 
+  private static validateArtwork(artwork: ArtworkArchiveRecord, index: number): {
+    isDraft: boolean;
+    reasons: string[];
+  } {
+    const reasons: string[] = [];
+    let isDraft = false;
+    
+    const name = artwork.Name || '';
+    
+    if (!name || name.trim() === '') {
+      isDraft = true;
+      reasons.push('Missing name');
+      Logger.warning(`No name for record ${index + 1}, marking as draft for manual review`);
+    } else if (name.length === 1) {
+      isDraft = true;
+      reasons.push('Name is only one character');
+      Logger.warning(`Single character name for record ${index + 1}: "${name}", marking as draft`);
+    }
+
+    const price = artwork.Price;
+    if (!price || price.trim() === '') {
+      isDraft = true;
+      reasons.push('Missing price');
+      Logger.warning(`No price for record ${index + 1} (${name}), setting to 0 and marking as draft`);
+    }
+
+    return { isDraft, reasons };
+  }
 
   private static generateDescription(artwork: ArtworkArchiveRecord): string {
     const parts: string[] = [];
@@ -185,12 +155,6 @@ export class ArtworkToShopifyConverter {
     tags.push('Original Art', 'Gallery', 'Impulso Galeria');
     
     return [...new Set(tags)].filter(t => t).join(', ');
-  }
-
-  private static cleanPrice(price: string): string {
-    const cleaned = price.replace(/[^0-9.]/g, '');
-    const numPrice = parseFloat(cleaned);
-    return isNaN(numPrice) ? '0' : numPrice.toFixed(2);
   }
 
   private static getVendor(artwork: ArtworkArchiveRecord): string {

@@ -67,3 +67,33 @@ export type DbConfig = {
   password: string;
   database: string;
 }
+
+
+export type DuplicateMatch = {
+  title: string;
+  artworkSKU: string;
+  wooSKU: string;
+  artworkPrice: string;
+  wooPrice: string;
+  artworkStatus: string;
+  wooStatus: string;
+  artworkArtist: string;
+  wooArtist: string;
+  dimensions: {
+    artwork: string;
+    woo: string;
+  };
+  matchType: string;
+  similarity: number;
+}
+
+
+export type DuplicateDetectionConfig = {
+  matchingStrategy: 'exactTitle' | 'normalizedTitle' | 'advanced' | 'fuzzy';
+  similarityThreshold?: number;
+}
+
+export type DuplicateResolutionConfig = {
+  strategy: 'keepBoth' | 'preferArtwork' | 'preferWoo' | 'ask';
+  onManualChoice?: (duplicate: DuplicateMatch) => Promise<'artwork' | 'woo' | 'both'>;
+}
