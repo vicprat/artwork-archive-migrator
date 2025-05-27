@@ -1,4 +1,3 @@
-
 import * as path from 'path';
 import * as fs from 'fs';
 import inquirer from 'inquirer';
@@ -8,21 +7,26 @@ import { CsvHandler } from '../utils/csvHandler';
 import { ArtworkToShopifyConverter } from '../converters/artwork';
 import { WooCommerceToShopifyConverter } from '../converters/wooCommerce';
 import { ShopifyProduct } from '../models/ShopifyProduct';
-import { 
+import { PrismaProductService } from '../services/PrismaProductService';
+import { ImageProcessorService } from '../services/ImageProcessorService';
+import {
   DuplicateDetectionService,
 } from '../services/DuplicateDetectionService';
-import { 
+import {
   DuplicateResolutionService,
   DuplicateResolutionConfig
 } from '../services/DuplicateResolutionService';
-import { ArtworkArchiveRecord, DbConfig, 
+import { ArtworkArchiveRecord, DbConfig,
   DuplicateDetectionConfig,
-  DuplicateMatch } from '../types';
+  DuplicateMatch, ProcessedImage } from '../types';
 import { extractDimensions, generateHtmlReport } from '../utils/report';
 import { generateComparisonKeys, NormalizeUtils } from '../utils/normalizeFields';
 
 export class Commands {
-   static async preview(): Promise<void> {
+  private static prismaService: PrismaProductService;
+  private static imageProcessor: ImageProcessorService;
+
+  static async preview(): Promise<void> {
     Logger.header('Preview Artwork Archive Data');
 
     const answers = await inquirer.prompt([
@@ -86,7 +90,7 @@ export class Commands {
 
     try {
       const artworks = await CsvHandler.readCsv<ArtworkArchiveRecord>(answers.inputFile);
-      
+     
       Logger.info(`Total records found: ${artworks.length}\n`);
 
       let activeCount = 0;
@@ -102,7 +106,7 @@ export class Commands {
       artworks.forEach((artwork, index) => {
         const issues: string[] = [];
         let willBeDraft = false;
-        
+       
         if (!artwork.Name || artwork.Name.trim() === '') {
           issues.push('Missing name');
           noNameCount++;
@@ -112,13 +116,13 @@ export class Commands {
           singleCharNameCount++;
           willBeDraft = true;
         }
-        
+       
         if (!artwork.Price || artwork.Price.trim() === '') {
           issues.push('Missing price');
           noPriceCount++;
           willBeDraft = true;
         }
-        
+       
         if (artwork.Status?.toLowerCase() !== 'available') {
           issues.push(`Status: ${artwork.Status || 'not set'}`);
           notAvailableCount++;
@@ -143,7 +147,7 @@ export class Commands {
       console.log(chalk.yellow(`  - Single character name: ${singleCharNameCount}`));
       console.log(chalk.yellow(`  - Missing price: ${noPriceCount}`));
       console.log(chalk.yellow(`  - Not available status: ${notAvailableCount}`));
-      console.log('\n' + chalk.blue('Note: All records will be migrated. Products with issues will be marked as DRAFT.'));
+      console.log('\n' + chalk.blue('Note: All records will be migrated to database. Products with issues will be marked as DRAFT.'));
 
     } catch (error: any) {
       Logger.error(`Analysis failed: ${error.message}`);
@@ -151,34 +155,109 @@ export class Commands {
   }
 
   static async migrate(): Promise<void> {
-    Logger.header('Unified Migration Tool: Artwork Archive + WooCommerce to Shopify');
+    Logger.header('Unified Migration Tool: Artwork Archive + WooCommerce to Database');
 
     try {
-      // 1. Recopilar configuración del usuario
+      // 1. Inicializar servicios
+      await Commands.initializeServices();
+
+      // 2. Recopilar configuración del usuario
       const config = await Commands.getMigrationConfig();
-      
-      // 2. Procesar productos de Artwork Archive
-      const artworkProducts = await Commands.processArtworkArchive(config.artworkFile);
-      
-      // 3. Procesar productos de WooCommerce (si está habilitado)
-      const wooProducts = await Commands.processWooCommerce(config);
-      
-      // 4. Detectar y resolver duplicados (si está habilitado)
+     
+      // 3. Procesar productos de Artwork Archive
+      const { artworkProducts, artworkRecords, artworkImages } = await Commands.processArtworkArchive(config.artworkFile);
+     
+      // 4. Procesar productos de WooCommerce (si está habilitado)
+      const { wooProducts, wooRecords, wooImages } = await Commands.processWooCommerce(config);
+     
+      // 5. Detectar y resolver duplicados (si está habilitado)
       const { finalArtworkProducts, finalWooProducts } = await Commands.handleDuplicates(
-        artworkProducts, 
-        wooProducts, 
+        artworkProducts,
+        wooProducts,
         config
       );
-      
-      // 5. Combinar y guardar resultados
-      await Commands.saveResults(finalArtworkProducts, finalWooProducts, config.outputFile);
-      
-      // 6. Generar reportes finales
-      Commands.generateFinalReport(finalArtworkProducts, finalWooProducts, config);
-      
+     
+      // 6. Guardar en base de datos
+      await Commands.saveToDatabase(
+        artworkRecords, 
+        finalArtworkProducts, 
+        wooRecords, 
+        finalWooProducts,
+        artworkImages,
+        wooImages
+      );
+     
+      // 7. Generar reportes finales
+      await Commands.generateFinalReport(config);
+     
     } catch (error: any) {
       Logger.error(`Unified migration failed: ${error.message}`);
       console.error(error);
+    } finally {
+      await Commands.cleanup();
+    }
+  }
+
+  static async exportCsv(): Promise<void> {
+    Logger.header('Export Products to Shopify CSV');
+
+    try {
+      // Inicializar servicios
+      await Commands.initializeServices();
+
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'outputFile',
+          message: 'Enter the output filename for Shopify CSV:',
+          default: 'data/output/shopify_products_from_db.csv'
+        }
+      ]);
+
+      Logger.info('Obteniendo productos de la base de datos...');
+      const shopifyExportData = await Commands.prismaService.getProductsForShopifyExport();
+
+      if (shopifyExportData.length === 0) {
+        Logger.warning('No se encontraron productos en la base de datos.');
+        return;
+      }
+
+      const outputDir = path.dirname(answers.outputFile);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const outputPath = path.resolve(answers.outputFile);
+      await CsvHandler.writeCsv(outputPath, shopifyExportData, ShopifyProduct.getHeaders());
+
+      Logger.success(`CSV exportado exitosamente: ${outputPath}`);
+      Logger.info(`Total productos exportados: ${shopifyExportData.length}`);
+
+    } catch (error: any) {
+      Logger.error(`Export failed: ${error.message}`);
+    } finally {
+      await Commands.cleanup();
+    }
+  }
+
+  private static async initializeServices(): Promise<void> {
+    try {
+      // Inicializar servicio de base de datos
+      Commands.prismaService = new PrismaProductService();
+      await Commands.prismaService.initialize();
+
+      // Inicializar procesador de imágenes
+      Commands.imageProcessor = ImageProcessorService.createDefault();
+      await Commands.imageProcessor.initialize();
+
+      // Inicializar converters
+      await ArtworkToShopifyConverter.initialize();
+      await WooCommerceToShopifyConverter.initialize();
+
+      Logger.success('Todos los servicios inicializados correctamente');
+    } catch (error: any) {
+      Logger.error(`Error inicializando servicios: ${error.message}`);
+      throw error;
     }
   }
 
@@ -209,12 +288,6 @@ export class Commands {
         name: 'includeWooCommerce',
         message: 'Do you want to include WooCommerce products?',
         default: true
-      },
-      {
-        type: 'input',
-        name: 'outputFile',
-        message: 'Enter the output filename for Shopify CSV:',
-        default: 'data/output/shopify_products.csv'
       },
       {
         type: 'confirm',
@@ -261,56 +334,70 @@ export class Commands {
     return { ...answers, dbConfig };
   }
 
-  private static async processArtworkArchive(artworkFile: string): Promise<ShopifyProduct[]> {
+  private static async processArtworkArchive(artworkFile: string): Promise<{
+    artworkProducts: ShopifyProduct[];
+    artworkRecords: ArtworkArchiveRecord[];
+    artworkImages: Map<string, ProcessedImage>;
+  }> {
     Logger.info('Reading Artwork Archive CSV...');
     const artworks = await CsvHandler.readCsv<ArtworkArchiveRecord>(artworkFile);
-    
-    Logger.info('Converting Artwork Archive data to Shopify format...');
-    const artworkProducts = ArtworkToShopifyConverter.convertArtworkToShopify(artworks);
-    
+   
+    Logger.info('Converting Artwork Archive data to Shopify format with image processing...');
+    const artworkProducts = await ArtworkToShopifyConverter.convertArtworkToShopify(artworks);
+   
+    // Crear mapa de imágenes procesadas (esto se maneja dentro del converter ahora)
+    const artworkImages = new Map<string, ProcessedImage>();
+   
     Logger.success(`Successfully converted ${artworkProducts.length} Artwork Archive products`);
-    return artworkProducts;
+    return { artworkProducts, artworkRecords: artworks, artworkImages };
   }
 
-  private static async processWooCommerce(config: any): Promise<ShopifyProduct[]> {
+  private static async processWooCommerce(config: any): Promise<{
+    wooProducts: ShopifyProduct[];
+    wooRecords: any[];
+    wooImages: Map<string, ProcessedImage>;
+  }> {
     if (!config.includeWooCommerce) {
-      return [];
+      return { wooProducts: [], wooRecords: [], wooImages: new Map() };
     }
 
     try {
       Logger.info(`Connecting to MySQL database (${config.dbConfig.host}:${config.dbConfig.port}, DB: ${config.dbConfig.database})...`);
-      
+     
       const wooCommerceData = await WooCommerceToShopifyConverter.getWooCommerceProducts(config.dbConfig);
-      
+     
       if (wooCommerceData.length === 0) {
         Logger.warning('No products were found in WooCommerce, continuing with only Artwork Archive products.');
-        return [];
+        return { wooProducts: [], wooRecords: [], wooImages: new Map() };
       }
 
-      Logger.info('Converting WooCommerce data to Shopify format...');
-      const wooProducts = WooCommerceToShopifyConverter.convertToShopify(wooCommerceData);
+      Logger.info('Converting WooCommerce data to Shopify format with image processing...');
+      const wooProducts = await WooCommerceToShopifyConverter.convertToShopify(wooCommerceData);
       Logger.success(`Successfully converted ${wooProducts.length} WooCommerce products`);
+     
+      // Crear mapa de imágenes procesadas (esto se maneja dentro del converter ahora)
+      const wooImages = new Map<string, ProcessedImage>();
       
-      return wooProducts;
+      return { wooProducts, wooRecords: wooCommerceData, wooImages };
     } catch (wooError: any) {
       Logger.error(`Error processing WooCommerce data: ${wooError.message}`);
       Logger.warning('Continuing with only Artwork Archive products');
-      return [];
+      return { wooProducts: [], wooRecords: [], wooImages: new Map() };
     }
   }
 
   private static async handleDuplicates(
-    artworkProducts: ShopifyProduct[], 
-    wooProducts: ShopifyProduct[], 
+    artworkProducts: ShopifyProduct[],
+    wooProducts: ShopifyProduct[],
     config: any
   ): Promise<{ finalArtworkProducts: ShopifyProduct[], finalWooProducts: ShopifyProduct[] }> {
-    
+   
     if (!config.includeWooCommerce || !config.checkDuplicates || wooProducts.length === 0) {
       return { finalArtworkProducts: artworkProducts, finalWooProducts: wooProducts };
     }
 
     Logger.info('Checking for duplicate products between Artwork Archive and WooCommerce...');
-    
+   
     // Configurar el servicio de detección de duplicados
     const detectionConfig: DuplicateDetectionConfig = {
       matchingStrategy: config.matchingStrategy,
@@ -348,11 +435,8 @@ export class Commands {
       resolutionConfig
     );
 
-    // Generar reporte de duplicados
-    await Commands.generateDuplicateReport(duplicates, config, {
-      finalArtworkProducts: result.artworkProducts,
-      finalWooProducts: result.wooProducts
-    });
+    // Los duplicados se guardarán en la base de datos más adelante
+    Logger.info(`Duplicates resolved using strategy: ${config.duplicateStrategy}`);
 
     return {
       finalArtworkProducts: result.artworkProducts,
@@ -368,193 +452,129 @@ export class Commands {
           name: 'preference',
           message: `Choose which version to keep for "${duplicate.title}" (${duplicate.matchType}):`,
           choices: [
-            { 
-              name: `Artwork Archive (SKU: ${duplicate.artworkSKU}, Price: ${duplicate.artworkPrice}, Artist: ${duplicate.artworkArtist})`, 
-              value: 'artwork' 
+            {
+              name: `Artwork Archive (SKU: ${duplicate.artworkSKU}, Price: ${duplicate.artworkPrice}, Artist: ${duplicate.artworkArtist})`,
+              value: 'artwork'
             },
-            { 
-              name: `WooCommerce (SKU: ${duplicate.wooSKU}, Price: ${duplicate.wooPrice}, Artist: ${duplicate.wooArtist})`, 
-              value: 'woo' 
+            {
+              name: `WooCommerce (SKU: ${duplicate.wooSKU}, Price: ${duplicate.wooPrice}, Artist: ${duplicate.wooArtist})`,
+              value: 'woo'
             },
-            { 
-              name: 'Keep both versions', 
-              value: 'both' 
+            {
+              name: 'Keep both versions',
+              value: 'both'
             }
           ]
         }
       ]);
-      
+     
       return dupeChoice.preference;
     };
   }
 
-  private static async generateDuplicateReport(
-    duplicates: DuplicateMatch[], 
-    config: any, 
-    result: { finalArtworkProducts: ShopifyProduct[], finalWooProducts: ShopifyProduct[] }
+  private static async saveToDatabase(
+    artworkRecords: ArtworkArchiveRecord[],
+    artworkProducts: ShopifyProduct[],
+    wooRecords: any[],
+    wooProducts: ShopifyProduct[],
+    artworkImages: Map<string, ProcessedImage>,
+    wooImages: Map<string, ProcessedImage>
   ): Promise<void> {
-    if (duplicates.length === 0) return;
+    Logger.info('Saving products to database...');
 
-    // Recopilar insights sobre los duplicados
-    const genericTitleCount = duplicates.filter(d => 
-      NormalizeUtils.normalizeTitle(d.title) === 'untitled'
-    ).length;
-    
-    const priceDifferences = duplicates.map(d => {
-      const price1 = parseFloat(d.artworkPrice);
-      const price2 = parseFloat(d.wooPrice);
-      return {
-        title: d.title,
-        difference: Math.abs(price1 - price2),
-        percentDifference: Math.abs((price1 - price2) / ((price1 + price2) / 2)) * 100
-      };
-    });
-    
-    const bigPriceDiffs = priceDifferences.filter(d => d.difference > 100);
-    const artistMismatches = duplicates.filter(d => 
-      NormalizeUtils.normalizeArtist(d.artworkArtist) !== NormalizeUtils.normalizeArtist(d.wooArtist)
-    );
-    
-    const reportData = {
-      summary: {
-        totalDuplicates: duplicates.length,
-        resolutionStrategy: config.duplicateStrategy,
-        matchingStrategy: config.matchingStrategy,
-        date: new Date().toISOString(),
-        artworkProductsCount: result.finalArtworkProducts.filter(p => p.getStatus() !== undefined).length,
-        wooProductsCount: result.finalWooProducts.filter(p => p.getTitle() !== '').length,
-        similarityThreshold: config.similarityThreshold || 'N/A'
-      },
+    try {
+      // Guardar productos de Artwork Archive
+      if (artworkRecords.length > 0) {
+        Logger.info(`Saving ${artworkRecords.length} Artwork Archive products...`);
+        await Commands.prismaService.saveArtworkProducts(artworkRecords, artworkProducts, artworkImages);
+        Logger.success('Artwork Archive products saved to database');
+      }
 
-      duplicates: duplicates.map(dupe => ({
-        ...dupe,
-        normalizedTitle: NormalizeUtils.normalizeTitle(dupe.title),
-        normalizedArtworkArtist: NormalizeUtils.normalizeArtist(dupe.artworkArtist),
-        normalizedWooArtist: NormalizeUtils.normalizeArtist(dupe.wooArtist),
-        priceDifference: Math.abs(parseFloat(dupe.artworkPrice) - parseFloat(dupe.wooPrice)).toFixed(2),
-        percentPriceDifference: (Math.abs(parseFloat(dupe.artworkPrice) - parseFloat(dupe.wooPrice)) / 
-          ((parseFloat(dupe.artworkPrice) + parseFloat(dupe.wooPrice)) / 2) * 100).toFixed(1),
-        sameArtist: NormalizeUtils.normalizeArtist(dupe.artworkArtist) === 
-          NormalizeUtils.normalizeArtist(dupe.wooArtist),
-        sameDimensions: NormalizeUtils.normalizeDimensions(dupe.dimensions.artwork) === 
-          NormalizeUtils.normalizeDimensions(dupe.dimensions.woo) && 
-          dupe.dimensions.artwork !== '',
-        resolution: config.duplicateStrategy === 'ask' ? 'manual' : config.duplicateStrategy
-      })),
+      // Guardar productos de WooCommerce
+      if (wooRecords.length > 0) {
+        Logger.info(`Saving ${wooRecords.length} WooCommerce products...`);
+        await Commands.prismaService.saveWooCommerceProducts(wooRecords, wooProducts, wooImages);
+        Logger.success('WooCommerce products saved to database');
+      }
 
-      stats: {
-        genericTitles: {
-          count: genericTitleCount,
-          percentage: (genericTitleCount / duplicates.length * 100).toFixed(1)
-        },
-        priceDifferences: {
-          significantCount: bigPriceDiffs.length,
-          significantPercentage: (bigPriceDiffs.length / duplicates.length * 100).toFixed(1),
-          averageDifference: (priceDifferences.reduce((sum, d) => sum + d.difference, 0) / 
-            priceDifferences.length).toFixed(2),
-          maxDifference: Math.max(...priceDifferences.map(d => d.difference)).toFixed(2)
-        },
-        artistMismatches: {
-          count: artistMismatches.length,
-          percentage: (artistMismatches.length / duplicates.length * 100).toFixed(1)
+      Logger.success('All products successfully saved to database');
+    } catch (error: any) {
+      Logger.error(`Error saving to database: ${error.message}`);
+      throw error;
+    }
+  }
+
+  private static async generateFinalReport(config: any): Promise<void> {
+    try {
+      Logger.info('Generating final migration report...');
+      
+      const allProducts = await Commands.prismaService.getAllProducts();
+      
+      const artworkProducts = allProducts.filter(p => p.sourceType === 'ARTWORK_ARCHIVE');
+      const wooProducts = allProducts.filter(p => p.sourceType === 'WOOCOMMERCE');
+      
+      const activeArtworkProducts = artworkProducts.filter(p => p.status === 'ACTIVE');
+      const draftArtworkProducts = artworkProducts.filter(p => p.status === 'DRAFT');
+      const activeWooProducts = wooProducts.filter(p => p.status === 'ACTIVE');
+      const draftWooProducts = wooProducts.filter(p => p.status === 'DRAFT');
+      
+      const totalImages = allProducts.reduce((sum, product) => {
+        if (Array.isArray((product as any).images)) {
+          return sum + (product as any).images.length;
         }
+        return sum;
+      }, 0);
+      
+      console.log('\n' + chalk.bold('Migration Summary:'));
+      console.log(chalk.bold('=================='));
+      console.log(chalk.cyan('Artwork Archive products:'));
+      console.log(`  - Total: ${artworkProducts.length}`);
+      console.log(chalk.green(`  - Active: ${activeArtworkProducts.length}`));
+      console.log(chalk.yellow(`  - Draft: ${draftArtworkProducts.length}`));
+     
+      if (config.includeWooCommerce) {
+        console.log(chalk.cyan('\nWooCommerce products:'));
+        console.log(`  - Total: ${wooProducts.length}`);
+        console.log(chalk.green(`  - Active: ${activeWooProducts.length}`));
+        console.log(chalk.yellow(`  - Draft: ${draftWooProducts.length}`));
       }
-    };
-    
-    // Guardar reporte JSON
-    const duplicatesReportPath = path.resolve(path.dirname(config.outputFile), 'duplicate_products_report.json');
-    fs.writeFileSync(duplicatesReportPath, JSON.stringify(reportData, null, 2));
-    Logger.info(`Detailed duplicate products report saved to: ${duplicatesReportPath}`);
-    
-    // Guardar reporte HTML
-    const htmlReportPath = path.resolve(path.dirname(config.outputFile), 'duplicate_products_report.html');
-    const htmlContent = generateHtmlReport({
-      ...reportData,
-      genericTitleStats: {
-        sinTitulo: duplicates.filter(d => 
-          d.title.toLowerCase().trim() === 'sin título' || 
-          d.title.toLowerCase().trim() === 'sin titulo'
-        ).length,
-        st: duplicates.filter(d => 
-          d.title.toLowerCase().trim() === 's/t'
-        ).length
-      }
-    });
-    fs.writeFileSync(htmlReportPath, htmlContent);
-    Logger.info(`HTML duplicate products report saved to: ${htmlReportPath}`);
+     
+      console.log(chalk.cyan('\nCombined totals:'));
+      console.log(`  - Total products: ${allProducts.length}`);
+      console.log(chalk.green(`  - Total active products: ${activeArtworkProducts.length + activeWooProducts.length}`));
+      console.log(chalk.yellow(`  - Total draft products: ${draftArtworkProducts.length + draftWooProducts.length}`));
+      console.log(chalk.blue(`  - Total processed images: ${totalImages}`));
+     
+      console.log('\n' + chalk.cyan('Next steps:'));
+      console.log('1. Run "npm run export-csv" to generate Shopify CSV from database');
+      console.log('2. Review the CSV file before importing to Shopify');
+      console.log('3. Import the CSV file in your Shopify admin');
+      console.log('4. Check product details and images after import');
+      console.log('5. Publish draft products when ready');
+      
+      Logger.success('Migration completed successfully!');
+      
+    } catch (error: any) {
+      Logger.error(`Error generating final report: ${error.message}`);
+    }
   }
 
-  private static async saveResults(
-    artworkProducts: ShopifyProduct[], 
-    wooProducts: ShopifyProduct[], 
-    outputFile: string
-  ): Promise<void> {
-    const allShopifyProducts = [...artworkProducts, ...wooProducts];
-
-    if (allShopifyProducts.length === 0) {
-      Logger.warning('No products were converted. Please check your input sources.');
-      return;
+  private static async cleanup(): Promise<void> {
+    try {
+      if (Commands.prismaService) {
+        await Commands.prismaService.disconnect();
+      }
+      
+      if (Commands.imageProcessor) {
+        await Commands.imageProcessor.cleanup();
+      }
+      
+      await ArtworkToShopifyConverter.cleanup();
+      await WooCommerceToShopifyConverter.cleanup();
+      
+      Logger.info('Cleanup completed');
+    } catch (error: any) {
+      Logger.warning('Error during cleanup');
     }
-
-    // Convertir ShopifyProduct objetos a records
-    const productRecords = allShopifyProducts.map(product => product.toRecord());
-
-    const outputDir = path.dirname(outputFile);
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    const outputPath = path.resolve(outputFile);
-    await CsvHandler.writeCsv(outputPath, productRecords, ShopifyProduct.getHeaders());
-
-    Logger.success(`Migration complete! Output saved to: ${outputPath}`);
-    Logger.info(`Total products migrated: ${allShopifyProducts.length}`);
-  }
-
-  private static generateFinalReport(
-    artworkProducts: ShopifyProduct[], 
-    wooProducts: ShopifyProduct[], 
-    config: any
-  ): void {
-    const mainArtworkProducts = artworkProducts.filter(p => p.getStatus() !== undefined);
-    const mainWooProducts = wooProducts.filter(p => p.getTitle() !== '');
-    const activeArtworkProducts = mainArtworkProducts.filter(p => p.getStatus() === 'active');
-    const draftArtworkProducts = mainArtworkProducts.filter(p => p.getStatus() === 'draft');
-    const activeWooProducts = mainWooProducts.filter(p => p.getStatus() === 'active');
-    const draftWooProducts = mainWooProducts.filter(p => p.getStatus() === 'draft');
-    const wooImagesCount = config.includeWooCommerce ? (wooProducts.length - mainWooProducts.length) : 0;
-    const allProducts = [...artworkProducts, ...wooProducts];
-    const priceZeroProducts = allProducts.filter(p => p.getPrice() === '0.00');
-
-    console.log('\n' + chalk.bold('Migration Summary:'));
-    console.log(chalk.bold('=================='));
-    console.log(chalk.cyan('Artwork Archive products:'));
-    console.log(`  - Total: ${mainArtworkProducts.length}`);
-    console.log(chalk.green(`  - Active: ${activeArtworkProducts.length}`));
-    console.log(chalk.yellow(`  - Draft: ${draftArtworkProducts.length}`));
-    
-    if (config.includeWooCommerce) {
-      console.log(chalk.cyan('\nWooCommerce products:'));
-      console.log(`  - Total: ${mainWooProducts.length}`);
-      console.log(chalk.green(`  - Active: ${activeWooProducts.length}`));
-      console.log(chalk.yellow(`  - Draft: ${draftWooProducts.length}`));
-      console.log(chalk.blue(`  - Additional product images: ${wooImagesCount}`));
-    }
-    
-    console.log(chalk.cyan('\nCombined totals:'));
-    console.log(`  - Total main products: ${mainArtworkProducts.length + mainWooProducts.length}`);
-    console.log(chalk.green(`  - Total active products: ${activeArtworkProducts.length + activeWooProducts.length}`));
-    console.log(chalk.yellow(`  - Total draft products: ${draftArtworkProducts.length + draftWooProducts.length}`));
-    
-    if (priceZeroProducts.length > 0) {
-      console.log(chalk.blue(`\nProducts with price $0 (price on request): ${priceZeroProducts.length}`));
-    }
-    
-    console.log('\n' + chalk.cyan('Next steps:'));
-    console.log('1. Review the unified Shopify CSV file before importing');
-    console.log('2. Update any missing information (names, prices, etc.)');
-    console.log('3. Import the CSV file in your Shopify admin');
-    console.log('4. Check product details and images after import');
-    console.log('5. Publish draft products when ready');
   }
 }

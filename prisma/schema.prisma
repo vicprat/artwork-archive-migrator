@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Identificadores y metadata
+  handle          String        @unique
+  title           String
+  bodyHtml        String?       @map("body_html")
+  vendor          String?
+  productCategory String?       @map("product_category")
+  type            String?
+  tags            String?
+  published       Boolean       @default(true)
+  status          ProductStatus @default(ACTIVE)
+
+  // SEO
+  seoTitle       String? @map("seo_title")
+  seoDescription String? @map("seo_description")
+
+  // Variant data (asumiendo una variante por producto para simplificar)
+  variantSku                String?  @map("variant_sku")
+  variantPrice              Decimal  @db.Decimal(10, 2)
+  variantCompareAtPrice     Decimal? @map("variant_compare_at_price") @db.Decimal(10, 2)
+  variantGrams              Int?     @map("variant_grams")
+  variantInventoryTracker   String?  @map("variant_inventory_tracker")
+  variantInventoryQty       Int?     @map("variant_inventory_qty")
+  variantInventoryPolicy    String?  @map("variant_inventory_policy")
+  variantFulfillmentService String?  @map("variant_fulfillment_service")
+  variantRequiresShipping   Boolean? @map("variant_requires_shipping")
+  variantTaxable            Boolean? @map("variant_taxable")
+  variantBarcode            String?  @map("variant_barcode")
+  variantWeightUnit         String?  @map("variant_weight_unit")
+  variantTaxCode            String?  @map("variant_tax_code")
+  costPerItem               Decimal? @map("cost_per_item") @db.Decimal(10, 2)
+
+  // Options (Shopify permite hasta 3 opciones)
+  option1Name  String? @map("option1_name")
+  option1Value String? @map("option1_value")
+  option2Name  String? @map("option2_name")
+  option2Value String? @map("option2_value")
+  option3Name  String? @map("option3_name")
+  option3Value String? @map("option3_value")
+
+  // Google Shopping
+  googleProductCategory String? @map("google_product_category")
+  googleGender          String? @map("google_gender")
+  googleAgeGroup        String? @map("google_age_group")
+  googleMPN             String? @map("google_mpn")
+  googleCondition       String? @map("google_condition")
+  googleCustomProduct   String? @map("google_custom_product")
+
+  // Gift Card
+  giftCard Boolean @default(false) @map("gift_card")
+
+  // Pricing por región
+  includedUS         Boolean? @map("included_us")
+  priceUS            Decimal? @map("price_us") @db.Decimal(10, 2)
+  compareAtPriceUS   Decimal? @map("compare_at_price_us") @db.Decimal(10, 2)
+  includedIntl       Boolean? @map("included_intl")
+  priceIntl          Decimal? @map("price_intl") @db.Decimal(10, 2)
+  compareAtPriceIntl Decimal? @map("compare_at_price_intl") @db.Decimal(10, 2)
+
+  // Source tracking
+  sourceType SourceType
+  sourceId   String?    @map("source_id") // ID original del artwork o woocommerce
+
+  // Artwork Archive specific fields
+  artworkArtist String? @map("artwork_artist")
+  artworkMedium String? @map("artwork_medium")
+  artworkHeight String? @map("artwork_height")
+  artworkWidth  String? @map("artwork_width")
+  artworkDepth  String? @map("artwork_depth")
+  artworkYear   String? @map("artwork_year")
+  artworkStatus String? @map("artwork_status")
+
+  // Relaciones
+  images     ProductImage[]
+  duplicates DuplicateMatch[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relación con producto
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // URLs de imagen
+  originalUrl  String  @map("original_url") // URL original
+  supabaseUrl  String  @map("supabase_url") // URL de Supabase después de conversión
+  supabasePath String? @map("supabase_path") // Path interno en Supabase storage
+
+  // Metadata de imagen
+  position Int
+  altText  String? @map("alt_text")
+  width    Int?
+  height   Int?
+  fileSize Int?    @map("file_size") // en bytes
+  format   String? // webp, jpg, png, etc.
+
+  // Estado de procesamiento
+  processed   Boolean   @default(false)
+  processedAt DateTime? @map("processed_at")
+
+  @@map("product_images")
+}
+
+model DuplicateMatch {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Productos relacionados
+  artworkProductId String  @map("artwork_product_id")
+  wooProductId     String  @map("woo_product_id")
+  artworkProduct   Product @relation(fields: [artworkProductId], references: [id], onDelete: Cascade)
+
+  // Información del match
+  title      String
+  matchType  String @map("match_type") // exactTitle, normalizedTitle, advanced, fuzzy
+  confidence Float? // Para fuzzy matching
+
+  // Datos comparativos
+  artworkSKU    String @map("artwork_sku")
+  wooSKU        String @map("woo_sku")
+  artworkPrice  String @map("artwork_price")
+  wooPrice      String @map("woo_price")
+  artworkArtist String @map("artwork_artist")
+  wooArtist     String @map("woo_artist")
+
+  // Dimensiones como JSON para flexibilidad
+  dimensions Json?
+
+  // Resolución del duplicado
+  resolution      DuplicateResolution @default(PENDING)
+  resolvedAt      DateTime?           @map("resolved_at")
+  resolutionNotes String?             @map("resolution_notes")
+
+  @@map("duplicate_matches")
+}
+
+// Enums
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+enum SourceType {
+  ARTWORK_ARCHIVE
+  WOOCOMMERCE
+}
+
+enum DuplicateResolution {
+  PENDING
+  KEEP_ARTWORK
+  KEEP_WOO
+  KEEP_BOTH
+  MERGED
+}

@@ -2,8 +2,22 @@ import mysql from 'mysql2/promise';
 import { DbConfig, WooProduct } from '../types';
 import { ShopifyProduct } from '../models/ShopifyProduct';
 import { Logger } from '../utils/logger';
+import { ImageProcessorService } from '../services/ImageProcessorService';
 
 export class WooCommerceToShopifyConverter {
+  private static imageProcessor: ImageProcessorService;
+
+  static async initialize(): Promise<void> {
+    try {
+      this.imageProcessor = ImageProcessorService.createDefault();
+      await this.imageProcessor.initialize();
+      Logger.success('WooCommerceToShopifyConverter inicializado con procesamiento de imágenes');
+    } catch (error: any) {
+      Logger.error(`Error inicializando WooCommerceToShopifyConverter: ${error.message}`);
+      throw error;
+    }
+  }
+
   static async getWooCommerceProducts(config: DbConfig): Promise<WooProduct[]> {
     let connection;
     try {
@@ -96,30 +110,66 @@ export class WooCommerceToShopifyConverter {
     }
   }
 
-  static convertToShopify(products: WooProduct[]): ShopifyProduct[] {
+  static async convertToShopify(products: WooProduct[]): Promise<ShopifyProduct[]> {
+    // Verificar que el servicio esté inicializado
+    if (!this.imageProcessor) {
+      await this.initialize();
+    }
+
     Logger.info('Converting WooCommerce products to Shopify format...');
     const shopifyProducts: ShopifyProduct[] = [];
 
-    products.forEach((wooProduct, index) => {
-      const mainProduct = this.convertSingleWooProduct(wooProduct);
-      shopifyProducts.push(mainProduct);
+    for (const [index, wooProduct] of products.entries()) {
+      try {
+        Logger.info(`Processing WooCommerce product ${index + 1}/${products.length}: ${wooProduct.post_title}`);
+        
+        const mainProduct = await this.convertSingleWooProduct(wooProduct);
+        shopifyProducts.push(mainProduct);
 
-      // Agregar filas de imágenes adicionales si existen
-      if (wooProduct.gallery_images) {
-        const additionalImages = this.createAdditionalImageRows(wooProduct, mainProduct);
-        shopifyProducts.push(...additionalImages);
+        // Agregar filas de imágenes adicionales si existen
+        if (wooProduct.gallery_images) {
+          const additionalImages = await this.createAdditionalImageRows(wooProduct, mainProduct);
+          shopifyProducts.push(...additionalImages);
+        }
+
+        Logger.success(`WooCommerce product converted: ${wooProduct.post_title}`);
+      } catch (error: any) {
+        Logger.error(`Error converting WooCommerce product ${wooProduct.post_title}: ${error.message}`);
       }
-    });
+    }
 
     Logger.success(`Successfully converted ${products.length} WooCommerce products to Shopify format`);
     return shopifyProducts;
   }
 
-  private static convertSingleWooProduct(wooProduct: WooProduct): ShopifyProduct {
+  private static async convertSingleWooProduct(wooProduct: WooProduct): Promise<ShopifyProduct> {
     const product = new ShopifyProduct();
     
     const status = wooProduct.post_status === 'publish' ? 'active' : 'draft';
     const weight = wooProduct.weight ? (parseFloat(wooProduct.weight) * 1000).toString() : '1000';
+    
+    // Procesar imagen principal si existe
+    let finalImageUrl = '';
+    if (wooProduct.image_url) {
+      Logger.info(`Procesando imagen principal para ${wooProduct.post_title}: ${wooProduct.image_url}`);
+      
+      try {
+        const processedImage = await this.imageProcessor.processImage(wooProduct.image_url);
+        
+        if (processedImage.success) {
+          finalImageUrl = processedImage.supabaseUrl;
+          Logger.success(`Imagen principal procesada exitosamente para ${wooProduct.post_title}`);
+        } else {
+          Logger.warning(`Error procesando imagen principal para ${wooProduct.post_title}: ${processedImage.error}`);
+          // Mantener la URL original como fallback
+          finalImageUrl = wooProduct.image_url;
+        }
+      } catch (error: any) {
+        Logger.error(`Error procesando imagen principal para ${wooProduct.post_title}: ${error.message}`);
+        // Mantener la URL original como fallback
+        finalImageUrl = wooProduct.image_url;
+      }
+    }
     
     product
       .setTitle(wooProduct.post_title)
@@ -131,7 +181,7 @@ export class WooCommerceToShopifyConverter {
       .setVariantSKU(wooProduct.sku || `WOO-${wooProduct.ID}`)
       .setVariantPrice(wooProduct.regular_price || '0.00')
       .setVariantInventoryQty(wooProduct.stock_quantity || '0')
-      .setImageSrc(wooProduct.image_url || '')
+      .setImageSrc(finalImageUrl)
       .setStatus(status);
 
     // Configurar campos específicos de WooCommerce
@@ -153,21 +203,56 @@ export class WooCommerceToShopifyConverter {
     return product;
   }
 
-  private static createAdditionalImageRows(wooProduct: WooProduct, mainProduct: ShopifyProduct): ShopifyProduct[] {
+  private static async createAdditionalImageRows(wooProduct: WooProduct, mainProduct: ShopifyProduct): Promise<ShopifyProduct[]> {
     const imageRows: ShopifyProduct[] = [];
     const galleryUrls = wooProduct.gallery_images.split(', ');
     
-    galleryUrls.forEach((url, imgIndex) => {
-      if (url.trim()) {
+    Logger.info(`Procesando ${galleryUrls.length} imágenes adicionales para ${wooProduct.post_title}`);
+
+    for (let imgIndex = 0; imgIndex < galleryUrls.length; imgIndex++) {
+      const url = galleryUrls[imgIndex].trim();
+      if (!url) continue;
+
+      try {
+        Logger.info(`Procesando imagen adicional ${imgIndex + 1}/${galleryUrls.length}: ${url}`);
+        
+        let processedUrl = url;
+        const processedImage = await this.imageProcessor.processImage(url);
+        
+        if (processedImage.success) {
+          processedUrl = processedImage.supabaseUrl;
+          Logger.success(`Imagen adicional ${imgIndex + 1} procesada exitosamente`);
+        } else {
+          Logger.warning(`Error procesando imagen adicional ${imgIndex + 1}: ${processedImage.error}`);
+          // Mantener la URL original como fallback
+        }
+
         const imageRow = mainProduct.createImageRow(
-          url.trim(),
+          processedUrl,
           imgIndex + 2, // +2 porque la imagen principal es posición 1
           wooProduct.post_title
         );
         imageRows.push(imageRow);
+        
+      } catch (error: any) {
+        Logger.error(`Error procesando imagen adicional ${imgIndex + 1} para ${wooProduct.post_title}: ${error.message}`);
+        // Crear fila con URL original como fallback
+        const imageRow = mainProduct.createImageRow(
+          url,
+          imgIndex + 2,
+          wooProduct.post_title
+        );
+        imageRows.push(imageRow);
       }
-    });
+    }
     
+    Logger.success(`Procesadas ${imageRows.length} imágenes adicionales para ${wooProduct.post_title}`);
     return imageRows;
+  }
+
+  static async cleanup(): Promise<void> {
+    if (this.imageProcessor) {
+      await this.imageProcessor.cleanup();
+    }
   }
 }

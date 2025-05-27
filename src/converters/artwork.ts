@@ -1,9 +1,28 @@
 import { ArtworkArchiveRecord } from '../types';
 import { ShopifyProduct } from '../models/ShopifyProduct';
 import { Logger } from '../utils/logger';
+import { ImageProcessorService } from '../services/ImageProcessorService';
 
 export class ArtworkToShopifyConverter {
-  static convertArtworkToShopify(artworks: ArtworkArchiveRecord[]): ShopifyProduct[] {
+  private static imageProcessor: ImageProcessorService;
+
+  static async initialize(): Promise<void> {
+    try {
+      this.imageProcessor = ImageProcessorService.createDefault();
+      await this.imageProcessor.initialize();
+      Logger.success('ArtworkToShopifyConverter inicializado con procesamiento de imágenes');
+    } catch (error: any) {
+      Logger.error(`Error inicializando ArtworkToShopifyConverter: ${error.message}`);
+      throw error;
+    }
+  }
+
+  static async convertArtworkToShopify(artworks: ArtworkArchiveRecord[]): Promise<ShopifyProduct[]> {
+    // Verificar que el servicio esté inicializado
+    if (!this.imageProcessor) {
+      await this.initialize();
+    }
+
     Logger.info('Starting conversion from Artwork Archive to Shopify format...');
     
     const shopifyProducts: ShopifyProduct[] = [];
@@ -14,7 +33,7 @@ export class ArtworkToShopifyConverter {
       try {
         Logger.info(`Processing record ${index + 1}: ${artwork.Name || 'Unnamed'}`);
         
-        const product = this.convertSingleArtwork(artwork, index);
+        const product = await this.convertSingleArtwork(artwork, index);
         
         if (product.getStatus() === 'draft') {
           draftCount++;
@@ -33,10 +52,11 @@ export class ArtworkToShopifyConverter {
     Logger.success(`Conversion complete! Total converted: ${convertedCount}`);
     Logger.info(`Active products: ${convertedCount - draftCount}`);
     Logger.info(`Draft products: ${draftCount}`);
+    
     return shopifyProducts;
   }
 
-  private static convertSingleArtwork(artwork: ArtworkArchiveRecord, index: number): ShopifyProduct {
+  private static async convertSingleArtwork(artwork: ArtworkArchiveRecord, index: number): Promise<ShopifyProduct> {
     const product = new ShopifyProduct();
     
     // Validaciones y determinación del estado
@@ -53,8 +73,32 @@ export class ArtworkToShopifyConverter {
       .setTags(this.generateTags(artwork))
       .setVariantSKU(artwork['Piece Id'] || `ART-${Date.now()}-${index}`)
       .setVariantPrice(artwork.Price || '0')
-      .setVariantInventoryQty(artwork.Status?.toLowerCase() === 'available' ? '1' : '0')
-      .setImageSrc(artwork['Primary Image Url'] || '');
+      .setVariantInventoryQty(artwork.Status?.toLowerCase() === 'available' ? '1' : '0');
+
+    // Procesar imagen si existe
+    let finalImageUrl = '';
+    if (artwork['Primary Image Url']) {
+      Logger.info(`Procesando imagen para ${name}: ${artwork['Primary Image Url']}`);
+      
+      try {
+        const processedImage = await this.imageProcessor.processImage(artwork['Primary Image Url']);
+        
+        if (processedImage.success) {
+          finalImageUrl = processedImage.supabaseUrl;
+          Logger.success(`Imagen procesada exitosamente para ${name}`);
+        } else {
+          Logger.warning(`Error procesando imagen para ${name}: ${processedImage.error}`);
+          // Mantener la URL original como fallback
+          finalImageUrl = artwork['Primary Image Url'];
+        }
+      } catch (error: any) {
+        Logger.error(`Error procesando imagen para ${name}: ${error.message}`);
+        // Mantener la URL original como fallback
+        finalImageUrl = artwork['Primary Image Url'];
+      }
+    }
+
+    product.setImageSrc(finalImageUrl);
 
     // Configurar estado basado en validaciones
     if (validationResult.isDraft || artwork.Status?.toLowerCase() !== 'available') {
@@ -159,5 +203,11 @@ export class ArtworkToShopifyConverter {
 
   private static getVendor(artwork: ArtworkArchiveRecord): string {
     return artwork['Artist(s)'] || 'Unknown Artist';
+  }
+
+  static async cleanup(): Promise<void> {
+    if (this.imageProcessor) {
+      await this.imageProcessor.cleanup();
+    }
   }
 }

@@ -4,10 +4,15 @@
   "description": "CLI tool to migrate Artwork Archive data to Shopify CSV format",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "test": "jest"
+    "preview": "ts-node src/index.ts preview",
+    "analyze": "ts-node src/index.ts analyze", 
+    "migrate": "ts-node src/index.ts migrate",
+    "export-csv": "ts-node src/index.ts export-csv",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "db:reset": "prisma migrate reset"
   },
   "keywords": [
     "cli",
@@ -18,16 +23,23 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^6.8.2",
+    "@supabase/supabase-js": "^2.49.8",
+    "axios": "^1.9.0",
     "chalk": "^4.1.2",
     "commander": "^11.1.0",
     "csv-parser": "^3.0.0",
     "csv-writer": "^1.6.0",
+    "dotenv": "^16.5.0",
     "inquirer": "^8.2.6",
-    "mysql2": "^3.14.1"
+    "mysql2": "^3.14.1",
+    "sharp": "^0.34.2",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.7",
-    "@types/node": "^20.10.5",
+    "@types/node": "^20.17.50",
+    "prisma": "^6.8.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
