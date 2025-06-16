@@ -240,6 +240,426 @@ export class Commands {
     }
   }
 
+  static async exportShopifyCsv(): Promise<void> {
+  Logger.header('Export Products to Shopify CSV (with Supabase Images)');
+
+  try {
+    // Inicializar servicios
+    await Commands.initializeServices();
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'outputFile',
+        message: 'Enter the output filename for Shopify CSV:',
+        default: 'data/output/shopify_products_supabase.csv'
+      },
+      {
+        type: 'list',
+        name: 'imageSource',
+        message: 'Which image URLs do you want to use?',
+        choices: [
+          { name: 'Supabase URLs (recommended)', value: 'supabase' },
+          { name: 'Original URLs (fallback)', value: 'original' },
+          { name: 'Mixed (Supabase if available, original as fallback)', value: 'mixed' }
+        ],
+        default: 'supabase'
+      },
+      {
+        type: 'list',
+        name: 'statusFilter',
+        message: 'Which products do you want to export?',
+        choices: [
+          { name: 'All products', value: 'all' },
+          { name: 'Active products only', value: 'active' },
+          { name: 'Draft products only', value: 'draft' }
+        ],
+        default: 'all'
+      }
+    ]);
+
+    Logger.info('Obteniendo productos de la base de datos...');
+    const shopifyExportData = await Commands.prismaService.getProductsForShopifyExportWithSupabase(
+      answers.imageSource,
+      answers.statusFilter
+    );
+
+    if (shopifyExportData.length === 0) {
+      Logger.warning('No se encontraron productos en la base de datos.');
+      return;
+    }
+
+    // Crear directorio si no existe
+    const outputDir = path.dirname(answers.outputFile);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    const outputPath = path.resolve(answers.outputFile);
+    await CsvHandler.writeCsv(outputPath, shopifyExportData, ShopifyProduct.getHeaders());
+
+    // Generar estadísticas del export
+    const stats = Commands.generateExportStats(shopifyExportData);
+    
+    Logger.success(`CSV exportado exitosamente: ${outputPath}`);
+    console.log('\n' + chalk.bold('Export Statistics:'));
+    console.log(chalk.bold('=================='));
+    console.log(`Total productos exportados: ${stats.totalProducts}`);
+    console.log(`Productos con imágenes: ${stats.productsWithImages}`);
+    console.log(`Total de imágenes: ${stats.totalImages}`);
+    console.log(`Imágenes de Supabase: ${stats.supabaseImages}`);
+    console.log(`Imágenes originales: ${stats.originalImages}`);
+    
+    if (answers.imageSource === 'supabase' && stats.originalImages > 0) {
+      Logger.warning(`${stats.originalImages} imágenes usan URLs originales porque no se encontró versión de Supabase`);
+    }
+
+  } catch (error: any) {
+    Logger.error(`Export failed: ${error.message}`);
+  } finally {
+    await Commands.cleanup();
+  }
+}
+
+static async exportShopifyTest(): Promise<void> {
+  Logger.header('Export Test Products to Shopify CSV (Limited by Category)');
+
+  try {
+    // Inicializar servicios
+    await Commands.initializeServices();
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'outputFile',
+        message: 'Enter the output filename for test Shopify CSV:',
+        default: 'data/output/shopify_products_test.csv'
+      },
+      {
+        type: 'number',
+        name: 'limitPerCategory',
+        message: 'How many products per category?',
+        default: 10,
+        validate: (input) => {
+          const num = parseInt(input);
+          if (isNaN(num) || num < 1 || num > 50) {
+            return 'Please enter a number between 1 and 50';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'imageSource',
+        message: 'Which image URLs do you want to use?',
+        choices: [
+          { name: 'Supabase URLs (recommended)', value: 'supabase' },
+          { name: 'Original URLs (fallback)', value: 'original' },
+          { name: 'Mixed (Supabase if available, original as fallback)', value: 'mixed' }
+        ],
+        default: 'supabase'
+      },
+      {
+        type: 'list',
+        name: 'selectionMethod',
+        message: 'How do you want to select products?',
+        choices: [
+          { name: 'Random selection from each category', value: 'random' },
+          { name: 'First N products from each category (by creation date)', value: 'first' },
+          { name: 'Most recent products from each category', value: 'recent' }
+        ],
+        default: 'random'
+      },
+      {
+        type: 'confirm',
+        name: 'includeWithoutCategory',
+        message: 'Include products without category?',
+        default: true
+      }
+    ]);
+
+    Logger.info('Analizando categorías disponibles...');
+    const categories = await Commands.prismaService.getActiveProductCategories();
+    
+    if (categories.length === 0) {
+      Logger.warning('No se encontraron categorías de productos activos.');
+      return;
+    }
+
+    console.log('\n' + chalk.bold('Categorías encontradas:'));
+    categories.forEach((cat, index) => {
+      const categoryName = cat.category || 'Sin categoría';
+      console.log(`${index + 1}. ${categoryName} (${cat.count} productos activos)`);
+    });
+
+    Logger.info(`\nSeleccionando ${answers.limitPerCategory} productos de cada categoría...`);
+    
+    const selectedProducts = await Commands.prismaService.getTestProductsByCategory(
+      answers.limitPerCategory,
+      answers.selectionMethod,
+      answers.includeWithoutCategory
+    );
+
+    if (selectedProducts.length === 0) {
+      Logger.warning('No se encontraron productos para exportar.');
+      return;
+    }
+
+    Logger.info('Generando CSV de testing...');
+    const shopifyExportData = await Commands.prismaService.convertTestProductsToShopifyExport(
+      selectedProducts,
+      answers.imageSource
+    );
+
+    // Crear directorio si no existe
+    const outputDir = path.dirname(answers.outputFile);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    const outputPath = path.resolve(answers.outputFile);
+    await CsvHandler.writeCsv(outputPath, shopifyExportData, ShopifyProduct.getHeaders());
+
+    // Generar estadísticas del export de testing
+    const stats = Commands.generateTestExportStats(selectedProducts, shopifyExportData);
+    
+    Logger.success(`CSV de testing exportado exitosamente: ${outputPath}`);
+    console.log('\n' + chalk.bold('Test Export Statistics:'));
+    console.log(chalk.bold('====================='));
+    console.log(`Total productos seleccionados: ${stats.totalProducts}`);
+    console.log(`Productos con imágenes: ${stats.productsWithImages}`);
+    console.log(`Total de imágenes: ${stats.totalImages}`);
+    console.log(`Imágenes de Supabase: ${stats.supabaseImages}`);
+    console.log(`Imágenes originales: ${stats.originalImages}`);
+    
+    console.log('\n' + chalk.bold('Breakdown por categoría:'));
+    stats.categoryBreakdown.forEach(cat => {
+      const categoryName = cat.category || 'Sin categoría';
+      console.log(`  ${categoryName}: ${cat.count} productos`);
+    });
+    
+    if (answers.imageSource === 'supabase' && stats.originalImages > 0) {
+      Logger.warning(`${stats.originalImages} imágenes usan URLs originales porque no se encontró versión de Supabase`);
+    }
+
+    console.log('\n' + chalk.cyan('🎯 Test CSV listo para importar en Shopify!'));
+    console.log(chalk.cyan('💡 Puedes usar este archivo para probar tu tienda headless.'));
+
+  } catch (error: any) {
+    Logger.error(`Test export failed: ${error.message}`);
+  } finally {
+    await Commands.cleanup();
+  }
+}
+
+/**
+ * Generar estadísticas del export de testing
+ */
+private static generateTestExportStats(products: any[], exportData: any[]): {
+  totalProducts: number;
+  productsWithImages: number;
+  totalImages: number;
+  supabaseImages: number;
+  originalImages: number;
+  categoryBreakdown: Array<{category: string | null, count: number}>;
+} {
+  const handles = new Set<string>();
+  let totalImages = 0;
+  let supabaseImages = 0;
+  let originalImages = 0;
+  
+  exportData.forEach(row => {
+    if (row['Title']) {
+      handles.add(row['Handle']);
+    }
+    
+    if (row['Image Src']) {
+      totalImages++;
+      if (row['Image Src'].includes('supabase')) {
+        supabaseImages++;
+      } else {
+        originalImages++;
+      }
+    }
+  });
+  
+  const productsWithImages = exportData.filter(row => 
+    row['Title'] && row['Image Src']
+  ).length;
+
+  // Breakdown por categoría
+  const categoryCount = new Map<string | null, number>();
+  products.forEach(product => {
+    const category = product.productCategory;
+    categoryCount.set(category, (categoryCount.get(category) || 0) + 1);
+  });
+
+  const categoryBreakdown = Array.from(categoryCount.entries()).map(([category, count]) => ({
+    category,
+    count
+  }));
+  
+  return {
+    totalProducts: handles.size,
+    productsWithImages,
+    totalImages,
+    supabaseImages,
+    originalImages,
+    categoryBreakdown
+  };
+}
+
+/**
+ * Comando específico para verificar el estado de las imágenes en Supabase
+ */
+static async checkImageStatus(): Promise<void> {
+  Logger.header('Check Image Processing Status');
+
+  try {
+    await Commands.initializeServices();
+
+    Logger.info('Verificando estado de procesamiento de imágenes...');
+    const imageStats = await Commands.prismaService.getImageProcessingStats();
+
+    console.log('\n' + chalk.bold('Image Processing Statistics:'));
+    console.log(chalk.bold('==============================='));
+    console.log(`Total productos: ${imageStats.totalProducts}`);
+    console.log(`Productos con imágenes: ${imageStats.productsWithImages}`);
+    console.log(`Total imágenes: ${imageStats.totalImages}`);
+    console.log(chalk.green(`Imágenes procesadas exitosamente: ${imageStats.processedImages}`));
+    console.log(chalk.yellow(`Imágenes pendientes/fallidas: ${imageStats.failedImages}`));
+    
+    if (imageStats.failedImages > 0) {
+      console.log('\n' + chalk.yellow('Products with failed image processing:'));
+      imageStats.failedImageDetails.forEach((product: any, index: number) => {
+        console.log(`${index + 1}. ${product.title} (ID: ${product.id})`);
+        product.failedImages.forEach((img: any) => {
+          console.log(`   - ${img.originalUrl} (Error: ${img.processed ? 'Unknown' : 'Not processed'})`);
+        });
+      });
+      
+      const retry = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'retryFailed',
+          message: 'Do you want to retry processing failed images?',
+          default: false
+        }
+      ]);
+      
+      if (retry.retryFailed) {
+        await Commands.retryFailedImages();
+      }
+    }
+
+  } catch (error: any) {
+    Logger.error(`Image status check failed: ${error.message}`);
+  } finally {
+    await Commands.cleanup();
+  }
+}
+
+/**
+ * Comando para reprocessar imágenes fallidas
+ */
+static async retryFailedImages(): Promise<void> {
+  Logger.info('Reprocessing failed images...');
+  
+  try {
+    const failedImages = await Commands.prismaService.getFailedImages();
+    
+    if (failedImages.length === 0) {
+      Logger.success('No failed images found to retry');
+      return;
+    }
+    
+    Logger.info(`Found ${failedImages.length} failed images to retry`);
+    
+    const imageProcessor = ImageProcessorService.createDefault();
+    await imageProcessor.initialize();
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const image of failedImages) {
+      try {
+        Logger.info(`Retrying image: ${image.originalUrl}`);
+        
+        const processedImage = await imageProcessor.processImage(image.originalUrl);
+        
+        if (processedImage.success) {
+          // Actualizar en base de datos
+          await Commands.prismaService.updateImageProcessingResult(image.id, processedImage);
+          successCount++;
+          Logger.success(`Successfully reprocessed: ${image.originalUrl}`);
+        } else {
+          failCount++;
+          Logger.error(`Failed to reprocess: ${image.originalUrl} - ${processedImage.error}`);
+        }
+        
+      } catch (error: any) {
+        failCount++;
+        Logger.error(`Error reprocessing ${image.originalUrl}: ${error.message}`);
+      }
+    }
+    
+    await imageProcessor.cleanup();
+    
+    console.log('\n' + chalk.bold('Retry Results:'));
+    console.log(chalk.bold('=============='));
+    console.log(chalk.green(`Successfully reprocessed: ${successCount}`));
+    console.log(chalk.red(`Still failed: ${failCount}`));
+    
+  } catch (error: any) {
+    Logger.error(`Failed to retry images: ${error.message}`);
+  }
+}
+
+/**
+ * Generar estadísticas del export
+ */
+private static generateExportStats(exportData: any[]): {
+  totalProducts: number;
+  productsWithImages: number;
+  totalImages: number;
+  supabaseImages: number;
+  originalImages: number;
+} {
+  const products = new Set<string>();
+  let totalImages = 0;
+  let supabaseImages = 0;
+  let originalImages = 0;
+  
+  exportData.forEach(row => {
+    if (row['Title']) {
+      products.add(row['Handle']);
+    }
+    
+    if (row['Image Src']) {
+      totalImages++;
+      if (row['Image Src'].includes('supabase')) {
+        supabaseImages++;
+      } else {
+        originalImages++;
+      }
+    }
+  });
+  
+  const productsWithImages = exportData.filter(row => 
+    row['Title'] && row['Image Src']
+  ).length;
+  
+  return {
+    totalProducts: products.size,
+    productsWithImages,
+    totalImages,
+    supabaseImages,
+    originalImages
+  };
+}
+
+  
+
   private static async initializeServices(): Promise<void> {
     try {
       // Inicializar servicio de base de datos

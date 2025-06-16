@@ -4,15 +4,19 @@
   "description": "CLI tool to migrate Artwork Archive data to Shopify CSV format",
   "main": "dist/index.js",
   "scripts": {
-    "preview": "ts-node src/index.ts preview",
-    "analyze": "ts-node src/index.ts analyze", 
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "migrate": "ts-node src/index.ts migrate",
+    "export-shopify": "ts-node src/index.ts export-shopify",
+    "export-shopify-test": "ts-node src/index.ts export-shopify-test",
     "export-csv": "ts-node src/index.ts export-csv",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:push": "prisma db push",
-    "db:reset": "prisma migrate reset"
+    "check-images": "ts-node src/index.ts check-images",
+    "retry-images": "ts-node src/index.ts retry-images",
+    "preview": "ts-node src/index.ts preview",
+    "analyze": "ts-node src/index.ts analyze",
+    
+    "help": "ts-node src/index.ts --help"
   },
   "keywords": [
     "cli",

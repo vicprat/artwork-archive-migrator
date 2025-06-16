@@ -1,3 +1,5 @@
+import { HandleGeneratorService } from '../services/HandleGeneratorService';
+
 export class ShopifyProduct {
   private data: Record<string, string> = {};
 
@@ -46,15 +48,45 @@ export class ShopifyProduct {
   }
 
   // Métodos setter para campos principales
+
+  /**
+   * Establecer handle usando el nuevo HandleGeneratorService
+   * @param title - Título para generar el handle
+   */
   setHandle(title: string): this {
-    this.data['Handle'] = this.generateHandle(title);
+    const uniqueHandle = HandleGeneratorService.generateUniqueHandle(
+      title,
+      this.data['Variant SKU'],
+      this.getSourceType()
+    );
+    this.data['Handle'] = uniqueHandle;
     return this;
   }
 
+  /**
+   * Establecer título y generar handle automáticamente
+   */
   setTitle(title: string): this {
     this.data['Title'] = title;
     this.data['SEO Title'] = title;
     this.data['Image Alt Text'] = title;
+    
+    // Generar handle único usando el nuevo servicio
+    const uniqueHandle = HandleGeneratorService.generateUniqueHandle(
+      title,
+      this.data['Variant SKU'],
+      this.getSourceType()
+    );
+    this.data['Handle'] = uniqueHandle;
+    
+    return this;
+  }
+
+  /**
+   * Método para forzar un handle específico (usar con precaución)
+   */
+  forceHandle(handle: string): this {
+    this.data['Handle'] = handle;
     return this;
   }
 
@@ -134,7 +166,20 @@ export class ShopifyProduct {
     return imageRow;
   }
 
-  // Métodos utilitarios
+  /**
+   * Obtener el tipo de fuente del producto basado en SKU
+   */
+  private getSourceType(): string {
+    const sku = this.data['Variant SKU'] || '';
+    if (sku.includes('WOO-')) return 'woocommerce';
+    if (sku.includes('ART-')) return 'artwork';
+    if (sku.startsWith('4') && sku.length > 6) return 'artwork'; // Los IDs de Artwork Archive son números largos
+    return 'unknown';
+  }
+
+  /**
+   * Método utilitario original (mantenido como fallback)
+   */
   private generateHandle(title: string): string {
     return title
       .toLowerCase()
